@@ -13,6 +13,7 @@ from gui.widgets.log_viewer import LogViewerWidget
 from gui.modules import ModuleRegistry, load_modules
 from gui.modules.base import BaseModule
 from gui.styles import DARK_STYLE
+from gui.dialogs.settings_dialog import SettingsDialog
 
 
 class AppShell(QMainWindow):
@@ -94,6 +95,13 @@ class AppShell(QMainWindow):
         home_action.setShortcut("Ctrl+H")
         home_action.triggered.connect(self._show_home)
         file_menu.addAction(home_action)
+
+        file_menu.addSeparator()
+
+        settings_action = QAction("설정(&S)", self)
+        settings_action.setShortcut("Ctrl+,")
+        settings_action.triggered.connect(self._show_settings)
+        file_menu.addAction(settings_action)
 
         file_menu.addSeparator()
 
@@ -227,3 +235,13 @@ class AppShell(QMainWindow):
             "<p>LS-DYNA 모델 자동화 도구</p>"
             "<p>PySide6 기반 (LGPL v3)</p>"
         )
+
+    def _show_settings(self):
+        """설정 다이얼로그"""
+        dialog = SettingsDialog(self.ctx.config.config, self)
+        if dialog.exec():
+            # 설정 저장
+            new_config = dialog.get_config()
+            for key, value in new_config.items():
+                self.ctx.config.set(key, value)
+            self.log_viewer.append("설정이 저장되었습니다.", "info")

@@ -1,10 +1,21 @@
 """Settings dialog"""
+import sys
+from pathlib import Path
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                                 QLabel, QLineEdit, QPushButton, QFileDialog,
                                 QComboBox)
 from PySide6.QtCore import Signal
 import qtawesome as qta
 from gui.styles import DARK_STYLE
+
+
+def get_default_koomesh_path() -> str:
+    """프로그램과 동일 디렉토리의 KooMeshModifier 기본 경로"""
+    project_dir = Path(__file__).parent.parent.parent
+    if sys.platform == 'win32':
+        return str(project_dir / "KooMeshModifier" / "run.bat")
+    else:
+        return str(project_dir / "KooMeshModifier" / "run.sh")
 
 class SettingsDialog(QDialog):
     settingsChanged = Signal(dict)
@@ -26,8 +37,11 @@ class SettingsDialog(QDialog):
         koomesh_layout = QHBoxLayout(koomesh_group)
 
         self.koomesh_edit = QLineEdit()
-        self.koomesh_edit.setText(self.config.get("koomesh_path", ""))
-        self.koomesh_edit.setPlaceholderText("KooMeshModifier 실행 파일 경로")
+        # 기본 경로 설정: 저장된 값이 없으면 프로그램 디렉토리/KooMeshModifier/run.sh(bat)
+        default_path = get_default_koomesh_path()
+        saved_path = self.config.get("koomesh_path", "")
+        self.koomesh_edit.setText(saved_path if saved_path else default_path)
+        self.koomesh_edit.setPlaceholderText(f"기본: {default_path}")
         koomesh_layout.addWidget(self.koomesh_edit, 1)
 
         browse_btn = QPushButton(qta.icon('fa5s.folder-open', color='#f3f4f6'), "찾기")
