@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+
+# PyInstaller
+*.spec
+dist/
+build/
+
+# Test outputs
+*.log
+.pytest_cache/
+.coverage
+
+# LS-DYNA outputs
+d3*
+messag
+*.odb
+*.prt
+*.sim
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+backup/
+backup_*/
+*.zip
+
+# User-specific
+.claude/
+config/*.json
+
+# Generated files
+examples/generated_kfiles/*.k
+examples/generated_kfiles/*.txt
+!examples/generated_kfiles/.gitkeep
+
+# Distribution files
+dist/
+dist_nuitka/
+LaminateModeller-Release/
+LaminateModeller-*.tar.gz
+*.spec
+
+# Keep important directories
+!docs/
+!examples/
+!gui/
+!core/

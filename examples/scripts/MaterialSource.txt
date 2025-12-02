@@ -1,0 +1,14 @@
+Name,Modulus,Density,type,add1,add2,add3
+FTG_R,70GPa,2.50,Elastic,0.22,,
+FTG_F,3GPa,1.35,Elastic,0.34,,
+CU,110GPa,8.90,Elastoplastic,0.34,250MPa,1GPa
+Panel-F,3.3GPa,1.42,Elastic,0.25,,
+Panel-PI,3GPa,1.42,Elastic,0.34,,
+BarrierPI,3GPa,1.40,Elastic,0.34,,
+POL,2.2GPa,1.20,Viscoelastic,0.47GPa,0.20GPa,500.0
+P-film,3.3GPa,1.39,Viscoelastic,0.70GPa,0.30GPa,500.0
+PL,5.6GPa,1.35,Viscoelastic,1.19GPa,0.51GPa,500.0
+Lattice,3GPa,1.50,Elastic,0.30,,
+TPU,3.0GPa,1.58,Viscoelastic,0.047GPa,0.020GPa,2000.0
+PSA,2.0GPa,1.20,Viscoelastic,0.00002GPa,0.00001GPa,2000.0
+OCA,2.0GPa,1.20,Viscoelastic,0.00002GPa,0.00001GPa,2000.0
