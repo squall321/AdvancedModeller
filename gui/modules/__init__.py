@@ -93,5 +93,9 @@ class ModuleRegistry:
 
 def load_modules():
     """모든 모듈 임포트 (등록 트리거)"""
+    from . import file_loader  # 첫 번째 모듈
     from . import advanced_laminate
     from . import advanced_contact
+    from . import keyword_manager
+    from . import model_viewer
+    from . import adjacent_parts_viewer

@@ -43,6 +43,9 @@ class AppShell(QMainWindow):
         self.sidebar.populate_modules()
         self.home_screen.populate_modules()
 
+        # 시작 시 File Loader 모듈 자동 표시
+        self._switch_to_module("file_loader")
+
     def _setup_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
