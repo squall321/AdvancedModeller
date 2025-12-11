@@ -155,45 +155,58 @@ class DOEPlacementGenerator:
             # Fallback: use old method
             samples = self.sample_lhs(num_samples, feasible_bounds)
 
-        # Check each sample for collisions
+        # Filter samples to enforce max_displacement constraint
+        valid_indices = []
+        for i, (dx, dy) in enumerate(samples):
+            displacement = np.sqrt(dx**2 + dy**2)
+            if displacement <= max_displacement:
+                valid_indices.append(i)
+
+        if len(valid_indices) < len(samples):
+            samples = samples[valid_indices]
+            print(f"Filtered {len(samples_world) - len(samples)} samples exceeding max_displacement")
+
+        # Check each sample for collisions and only keep valid ones
         placements = []
         num_valid = 0
+        placement_idx = 0
 
-        for idx, (dx, dy) in enumerate(samples):
+        for dx, dy in samples:
             # Check collision
             collision_parts = self.find_collisions(
                 source_bbox, dx, dy, adjacent_part_ids, adjacent_bboxes
             )
             is_valid = len(collision_parts) == 0
 
+            # Only add valid placements initially
             if is_valid:
+                # Calculate displaced center
+                displaced_center = source_center_3d.copy()
+                displaced_center[0] += dx
+                displaced_center[1] += dy
+
+                # Calculate quality score (distance to nearest obstacle)
+                score = self.calculate_placement_score(
+                    source_bbox, dx, dy, adjacent_bboxes
+                )
+
+                placement = Placement(
+                    index=placement_idx,
+                    dx=dx,
+                    dy=dy,
+                    is_valid=True,
+                    collision_parts=[],
+                    center=displaced_center,
+                    score=score
+                )
+                placements.append(placement)
                 num_valid += 1
-
-            # Calculate displaced center
-            displaced_center = source_center_3d.copy()
-            displaced_center[0] += dx
-            displaced_center[1] += dy
-
-            # Calculate quality score (distance to nearest obstacle)
-            score = self.calculate_placement_score(
-                source_bbox, dx, dy, adjacent_bboxes
-            )
-
-            placement = Placement(
-                index=idx,
-                dx=dx,
-                dy=dy,
-                is_valid=is_valid,
-                collision_parts=collision_parts,
-                center=displaced_center,
-                score=score
-            )
-            placements.append(placement)
+                placement_idx += 1
 
         # Resampling logic: if we didn't get enough valid placements, try again
-        if enable_resampling and num_valid < num_samples * 0.8:
-            # Need at least 80% valid placements
-            max_attempts = 3
+        if enable_resampling and num_valid < num_samples:
+            # Try to reach the target num_samples
+            max_attempts = 5
             attempt = 0
 
             while num_valid < num_samples and attempt < max_attempts:
@@ -224,6 +237,11 @@ class DOEPlacementGenerator:
                 for dx, dy in extra_samples:
                     if num_valid >= num_samples:
                         break  # We have enough now
+
+                    # Check max_displacement constraint first
+                    displacement = np.sqrt(dx**2 + dy**2)
+                    if displacement > max_displacement:
+                        continue  # Skip samples outside max displacement
 
                     # Check collision
                     collision_parts = self.find_collisions(
