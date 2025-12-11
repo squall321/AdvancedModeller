@@ -137,147 +137,86 @@ class DOEPlacementGenerator:
                 feasible_bounds[2], feasible_bounds[3]
             )]
 
-        # Sample from feasible regions using LHS
-        samples_world = self.feasible_analyzer.sample_from_regions(
-            regions=feasible_regions,
-            num_samples=num_samples,
-            strategy='weighted'  # Weight by region area
-        )
-
-        # Convert world coordinates to displacements
+        # Keep sampling until we get num_samples valid placements
         source_cx, source_cy = source_bbox.center()
-        if len(samples_world) > 0:
+        placements = []
+        num_valid = 0
+        placement_idx = 0
+        max_attempts = 20 if enable_resampling else 1
+        attempt = 0
+
+        # Batch size: start with requested amount, increase if needed
+        batch_size = num_samples
+
+        while num_valid < num_samples and attempt < max_attempts:
+            # Sample from feasible regions
+            samples_world = self.feasible_analyzer.sample_from_regions(
+                regions=feasible_regions,
+                num_samples=batch_size,
+                strategy='weighted'
+            )
+
+            if len(samples_world) == 0:
+                # No samples possible, try fallback
+                if attempt == 0:
+                    samples_world = self.sample_lhs(batch_size, feasible_bounds)
+                    samples_world = np.column_stack([
+                        samples_world[:, 0] + source_cx,
+                        samples_world[:, 1] + source_cy
+                    ])
+                else:
+                    break  # Give up
+
+            # Convert world coordinates to displacements
             samples = np.column_stack([
                 samples_world[:, 0] - source_cx,  # dx
                 samples_world[:, 1] - source_cy   # dy
             ])
-        else:
-            # Fallback: use old method
-            samples = self.sample_lhs(num_samples, feasible_bounds)
 
-        # Filter samples to enforce max_displacement constraint
-        valid_indices = []
-        for i, (dx, dy) in enumerate(samples):
-            displacement = np.sqrt(dx**2 + dy**2)
-            if displacement <= max_displacement:
-                valid_indices.append(i)
+            # Process each sample
+            for dx, dy in samples:
+                if num_valid >= num_samples:
+                    break  # Got enough valid placements
 
-        if len(valid_indices) < len(samples):
-            samples = samples[valid_indices]
-            print(f"Filtered {len(samples_world) - len(samples)} samples exceeding max_displacement")
+                # Check max_displacement constraint first
+                displacement = np.sqrt(dx**2 + dy**2)
+                if displacement > max_displacement:
+                    continue
 
-        # Check each sample for collisions and only keep valid ones
-        placements = []
-        num_valid = 0
-        placement_idx = 0
-
-        for dx, dy in samples:
-            # Check collision
-            collision_parts = self.find_collisions(
-                source_bbox, dx, dy, adjacent_part_ids, adjacent_bboxes
-            )
-            is_valid = len(collision_parts) == 0
-
-            # Only add valid placements initially
-            if is_valid:
-                # Calculate displaced center
-                displaced_center = source_center_3d.copy()
-                displaced_center[0] += dx
-                displaced_center[1] += dy
-
-                # Calculate quality score (distance to nearest obstacle)
-                score = self.calculate_placement_score(
-                    source_bbox, dx, dy, adjacent_bboxes
+                # Check collision
+                collision_parts = self.find_collisions(
+                    source_bbox, dx, dy, adjacent_part_ids, adjacent_bboxes
                 )
+                is_valid = len(collision_parts) == 0
 
-                placement = Placement(
-                    index=placement_idx,
-                    dx=dx,
-                    dy=dy,
-                    is_valid=True,
-                    collision_parts=[],
-                    center=displaced_center,
-                    score=score
-                )
-                placements.append(placement)
-                num_valid += 1
-                placement_idx += 1
+                if is_valid:
+                    # Calculate displaced center
+                    displaced_center = source_center_3d.copy()
+                    displaced_center[0] += dx
+                    displaced_center[1] += dy
 
-        # Resampling logic: if we didn't get enough valid placements, try again
-        if enable_resampling and num_valid < num_samples:
-            # Try to reach the target num_samples
-            max_attempts = 5
-            attempt = 0
-
-            while num_valid < num_samples and attempt < max_attempts:
-                # Calculate how many more we need
-                needed = num_samples - num_valid
-
-                # Generate 2x what we need to increase chances
-                extra_count = needed * 2
-
-                # Resample from feasible regions
-                extra_samples_world = self.feasible_analyzer.sample_from_regions(
-                    regions=feasible_regions,
-                    num_samples=extra_count,
-                    strategy='weighted'
-                )
-
-                if len(extra_samples_world) == 0:
-                    break  # No more samples possible
-
-                # Convert to displacements
-                extra_samples = np.column_stack([
-                    extra_samples_world[:, 0] - source_cx,
-                    extra_samples_world[:, 1] - source_cy
-                ])
-
-                # Check each extra sample
-                added_count = 0
-                for dx, dy in extra_samples:
-                    if num_valid >= num_samples:
-                        break  # We have enough now
-
-                    # Check max_displacement constraint first
-                    displacement = np.sqrt(dx**2 + dy**2)
-                    if displacement > max_displacement:
-                        continue  # Skip samples outside max displacement
-
-                    # Check collision
-                    collision_parts = self.find_collisions(
-                        source_bbox, dx, dy, adjacent_part_ids, adjacent_bboxes
+                    # Calculate quality score
+                    score = self.calculate_placement_score(
+                        source_bbox, dx, dy, adjacent_bboxes
                     )
-                    is_valid = len(collision_parts) == 0
 
-                    if is_valid:
-                        # Calculate displaced center
-                        displaced_center = source_center_3d.copy()
-                        displaced_center[0] += dx
-                        displaced_center[1] += dy
+                    placement = Placement(
+                        index=placement_idx,
+                        dx=dx,
+                        dy=dy,
+                        is_valid=True,
+                        collision_parts=[],
+                        center=displaced_center,
+                        score=score
+                    )
+                    placements.append(placement)
+                    num_valid += 1
+                    placement_idx += 1
 
-                        # Calculate score
-                        score = self.calculate_placement_score(
-                            source_bbox, dx, dy, adjacent_bboxes
-                        )
-
-                        # Add to placements with new index
-                        new_idx = len(placements)
-                        placement = Placement(
-                            index=new_idx,
-                            dx=dx,
-                            dy=dy,
-                            is_valid=True,
-                            collision_parts=[],
-                            center=displaced_center,
-                            score=score
-                        )
-                        placements.append(placement)
-                        num_valid += 1
-                        added_count += 1
-
-                if added_count == 0:
-                    break  # No valid samples added, stop trying
-
+            # If we still need more, increase batch size for next attempt
+            if num_valid < num_samples:
+                needed = num_samples - num_valid
+                batch_size = needed * 3  # Generate 3x what we need
                 attempt += 1
 
         return DOEResult(
