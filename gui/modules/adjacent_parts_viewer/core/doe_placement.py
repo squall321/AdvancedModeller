@@ -148,6 +148,22 @@ class DOEPlacementGenerator:
         # Batch size: start with requested amount, increase if needed
         batch_size = num_samples
 
+        # Debug: Check if there are any feasible regions
+        if not feasible_regions:
+            print(f"⚠ WARNING: No feasible regions found!")
+            print(f"  Source center: ({source_cx:.1f}, {source_cy:.1f})")
+            print(f"  Max displacement: {max_displacement:.1f} mm")
+            print(f"  Adjacent parts: {len(adjacent_bboxes)}")
+            return DOEResult(
+                source_part_id=source_part_id,
+                source_center=source_center_3d,
+                placements=[],
+                num_valid=0,
+                num_total=0,
+                max_displacement=max_displacement,
+                feasible_bounds=feasible_bounds
+            )
+
         while num_valid < num_samples and attempt < max_attempts:
             # Sample from feasible regions
             samples_world = self.feasible_analyzer.sample_from_regions(
@@ -218,6 +234,16 @@ class DOEPlacementGenerator:
                 needed = num_samples - num_valid
                 batch_size = needed * 3  # Generate 3x what we need
                 attempt += 1
+
+        # Log if we couldn't meet the target
+        if num_valid < num_samples:
+            print(f"⚠ WARNING: Could only generate {num_valid}/{num_samples} valid placements")
+            print(f"  Attempts made: {attempt}")
+            print(f"  Max displacement: {max_displacement:.1f} mm")
+            print(f"  Feasible regions: {len(feasible_regions)}")
+            if feasible_regions:
+                total_area = sum((r[1]-r[0])*(r[3]-r[2]) for r in feasible_regions)
+                print(f"  Total feasible area: {total_area:.1f} mm²")
 
         return DOEResult(
             source_part_id=source_part_id,
