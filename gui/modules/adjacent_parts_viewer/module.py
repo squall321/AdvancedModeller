@@ -5,13 +5,15 @@ Main module integrating detector, UI, and Model Viewer visualization.
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QSplitter, QMessageBox, QGroupBox,
-    QListWidget, QListWidgetItem
+    QListWidget, QListWidgetItem, QFileDialog
 )
 from PySide6.QtCore import Qt
 
 from gui.modules import ModuleRegistry
 from gui.modules.base import BaseModule
 from .core import AdjacentPartsDetector, DetectionResult
+from .core.doe_placement import DOEPlacementGenerator
+from .export.doe_exporter import DOEExporter
 from .widgets.control_panel import ControlPanel
 from .widgets.results_panel import ResultsPanel
 
@@ -44,6 +46,8 @@ class AdjacentPartsViewerModule(BaseModule):
         self._detector = None
         self._mesh_data = None
         self._current_source_part = None
+        self._doe_generator = None
+        self._last_detection_result = None
 
         self._setup_connections()
 
@@ -106,15 +110,21 @@ class AdjacentPartsViewerModule(BaseModule):
         # Part list
         self._part_list.currentItemChanged.connect(self._on_part_list_selection_changed)
 
-        # Control panel
+        # Control panel - detection
         self._control_panel.detectRequested.connect(self._on_detect_requested)
         self._control_panel.get_auto_plane_button().clicked.connect(
             self._on_auto_plane
         )
 
+        # Control panel - DOE
+        self._control_panel.generatePlacementsRequested.connect(self._on_generate_placements)
+        self._control_panel.clearPreviewRequested.connect(self._on_clear_preview)
+        self._control_panel.exportCSVRequested.connect(self._on_export_csv)
+
         # Results panel
         self._results_panel.partSelected.connect(self._on_part_selected)
         self._results_panel.partDoubleClicked.connect(self._on_part_zoom)
+        self._results_panel.placementSelected.connect(self._on_placement_selected)
 
     def on_activate(self):
         """모듈 활성화 시 호출"""
@@ -149,6 +159,11 @@ class AdjacentPartsViewerModule(BaseModule):
             self.log("Detector 초기화 중...", "info")
             self._detector = AdjacentPartsDetector(self._mesh_data)
             self.log("Detector 초기화 완료", "success")
+
+            # Initialize DOE generator
+            self.log("DOE Generator 초기화 중...", "info")
+            self._doe_generator = DOEPlacementGenerator(self._mesh_data)
+            self.log("DOE Generator 초기화 완료", "success")
 
             # Populate Part list
             self.log("Part 목록 채우는 중...", "info")
@@ -371,6 +386,31 @@ class AdjacentPartsViewerModule(BaseModule):
         # Visualize in 3D viewer
         self._visualize_results(result)
 
+        # Store result for DOE generation
+        self._last_detection_result = result
+
+        # Auto-suggest max displacement based on adjacent package distances
+        if self._doe_generator and len(result.adjacent_parts) > 0:
+            try:
+                adjacent_part_ids = list(result.adjacent_parts)
+                suggested_displacement = self._doe_generator.suggest_max_displacement(
+                    source_part_id=result.source_part_id,
+                    adjacent_part_ids=adjacent_part_ids
+                )
+                # Update control panel
+                self._control_panel._max_displacement_spin.setValue(suggested_displacement)
+                self.log(
+                    f"자동 Max Displacement 설정: {suggested_displacement:.1f} mm "
+                    f"(인접 패키지 거리 기반)",
+                    "info"
+                )
+            except Exception as e:
+                self.log(f"Max displacement 자동 계산 실패: {str(e)}", "warning")
+
+        # Enable DOE generation button
+        self._control_panel.enable_doe_controls(True)
+        self.log("DOE 생성 버튼 활성화", "info")
+
     def _visualize_results(self, result: DetectionResult):
         """Visualize results in Model Viewer
 
@@ -433,6 +473,118 @@ class AdjacentPartsViewerModule(BaseModule):
         part_id = current.data(Qt.UserRole)
         if part_id is not None:
             self.set_source_part(part_id)
+
+    # ============= DOE Methods =============
+
+    def _on_generate_placements(self):
+        """Handle Generate Placements button click"""
+        if not self._doe_generator or not self._last_detection_result:
+            QMessageBox.warning(
+                self,
+                "DOE Generation Error",
+                "Please run Adjacent Parts Detection first"
+            )
+            return
+
+        try:
+            # Get parameters
+            doe_count = self._control_panel.get_doe_count()
+            max_displacement = self._control_panel.get_max_displacement()
+
+            self.log(f"DOE 생성 시작: {doe_count} samples, max={max_displacement:.1f} mm", "info")
+            self._control_panel.set_status(f"Generating {doe_count} DOE placements...")
+
+            # Generate placements
+            result = self._last_detection_result
+            adjacent_part_ids = list(result.adjacent_parts)
+
+            doe_result = self._doe_generator.generate_placements(
+                source_part_id=result.source_part_id,
+                adjacent_part_ids=adjacent_part_ids,
+                num_samples=doe_count,
+                max_displacement=max_displacement
+            )
+
+            self.log(f"DOE 생성 완료: {doe_result.num_valid}/{doe_result.num_total} valid placements", "success")
+            self._control_panel.set_status(
+                f"Generated {doe_result.num_valid}/{doe_result.num_total} valid placements"
+            )
+
+            # Display results in results panel
+            self._results_panel.set_doe_results(doe_result)
+
+            # Enable action buttons
+            self._control_panel.enable_doe_actions(True)
+
+        except Exception as e:
+            import traceback
+            self.log(f"DOE 생성 실패: {str(e)}", "error")
+            self.log(f"상세:\n{traceback.format_exc()}", "error")
+            QMessageBox.critical(
+                self,
+                "DOE Generation Failed",
+                f"Failed to generate DOE placements:\n{str(e)}"
+            )
+
+    def _on_clear_preview(self):
+        """Handle Clear Preview button click"""
+        self._results_panel.clear_doe_preview()
+        self.log("DOE preview cleared", "info")
+
+    def _on_export_csv(self):
+        """Handle Export CSV button click"""
+        doe_result = self._results_panel.get_doe_result()
+        if not doe_result:
+            QMessageBox.warning(
+                self,
+                "Export Error",
+                "No DOE results to export"
+            )
+            return
+
+        # Get default filename
+        default_filename = DOEExporter.get_default_filename(doe_result)
+
+        # Show save file dialog
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export DOE Results",
+            default_filename,
+            "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if not filename:
+            return  # User cancelled
+
+        try:
+            # Export to CSV (valid placements only)
+            success = DOEExporter.export_to_csv(
+                doe_result=doe_result,
+                output_path=filename,
+                include_invalid=False  # Only valid placements
+            )
+
+            if success:
+                self.log(f"DOE 결과 CSV 출력 완료: {filename}", "success")
+                QMessageBox.information(
+                    self,
+                    "Export Successful",
+                    f"DOE results exported to:\n{filename}"
+                )
+            else:
+                raise ValueError("Export failed")
+
+        except Exception as e:
+            self.log(f"CSV 출력 실패: {str(e)}", "error")
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Failed to export CSV:\n{str(e)}"
+            )
+
+    def _on_placement_selected(self, placement_idx: int):
+        """Handle DOE placement selection"""
+        self.log(f"Placement {placement_idx + 1} selected", "info")
 
     @staticmethod
     def get_module_info():

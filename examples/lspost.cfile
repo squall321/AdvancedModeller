@@ -1,0 +1,10 @@
+$# LS-PrePost command file created by LS-PrePost(R) 2025 R1 (v4.12.8) - 07Aug2025 -64bit-Linux
+$# Created on Dec-9-2025 (22:50:14)
+open keyword "/home/koopark/claude/LaminateModeller/examples/DropSet.k"
+Message 1
+Message 0
+genselect target part
+selectpart select 1
+genselect target part
+genselect part remove part 21/0 
+selectpart select 0

@@ -9,9 +9,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
-from typing import Optional, Set, Dict
+from typing import Optional, Set, Dict, List, Tuple
 from gui.modules.model_viewer.widgets.gl_widget import ModelGLWidget
 from gui.modules.model_viewer.core.mesh_data import MeshData
+from gui.modules.adjacent_parts_viewer.rendering.visualization_manager import DOEVisualizationManager
+from gui.modules.adjacent_parts_viewer.core.spatial_utils import DOEResult, Placement
 import numpy as np
 
 
@@ -21,12 +23,17 @@ class ResultsPanel(QWidget):
     # Signals
     partSelected = Signal(int)  # User selected a part from list
     partDoubleClicked = Signal(int)  # User double-clicked part
+    placementSelected = Signal(int)  # User selected a DOE placement option
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self._mesh_data = None
         self._viewer = None
+        self._doe_viz_manager = None
+        self._doe_result = None
+        self._current_source_part_id = None
+        self._current_adjacent_parts = None
 
         self._setup_ui()
 
@@ -79,6 +86,25 @@ class ResultsPanel(QWidget):
         self._parts_list.itemClicked.connect(self._on_part_clicked)
         self._parts_list.itemDoubleClicked.connect(self._on_part_double_clicked)
         layout.addWidget(self._parts_list)
+
+        # DOE Placements list (initially hidden)
+        self._doe_label = QLabel("DOE Placements (0)")
+        self._doe_label.setStyleSheet("font-weight: bold; margin-top: 8px;")
+        self._doe_label.setVisible(False)
+        layout.addWidget(self._doe_label)
+
+        self._doe_list = QListWidget()
+        self._doe_list.setSelectionMode(QListWidget.SingleSelection)
+        self._doe_list.itemClicked.connect(self._on_doe_placement_clicked)
+        self._doe_list.setVisible(False)
+        layout.addWidget(self._doe_list)
+
+        # Legend for markers
+        self._marker_legend = QLabel("● Black: Original  ● Dark Red: DOE options  ● Transparent Red: Preview")
+        self._marker_legend.setStyleSheet("color: gray; font-size: 8pt; margin-top: 4px;")
+        self._marker_legend.setWordWrap(True)
+        self._marker_legend.setVisible(False)
+        layout.addWidget(self._marker_legend)
 
         return group
 
@@ -170,6 +196,10 @@ class ResultsPanel(QWidget):
             item.setData(Qt.UserRole, part_id)
             self._parts_list.addItem(item)
 
+        # Store current state for DOE generation
+        self._current_source_part_id = source_part_id
+        self._current_adjacent_parts = adjacent_parts
+
         # Update 3D viewer
         self._update_viewer(source_part_id, adjacent_parts, plane, view_direction, bbox_offset)
 
@@ -181,6 +211,21 @@ class ResultsPanel(QWidget):
         self._mesh_data = mesh_data
         if self._viewer and mesh_data:
             self._viewer.set_mesh(mesh_data)
+
+            # Initialize DOE visualization manager now that we have mesh data
+            if self._doe_viz_manager is None:
+                self._doe_viz_manager = DOEVisualizationManager(self._viewer)
+
+                # Hook into viewer's paintGL to render DOE visualization
+                original_paintGL = self._viewer.paintGL
+
+                def paintGL_with_doe():
+                    original_paintGL()
+                    # Render DOE visualization on top
+                    if self._doe_viz_manager and self._doe_viz_manager.is_active():
+                        self._doe_viz_manager.render(self._viewer._camera)
+
+                self._viewer.paintGL = paintGL_with_doe
 
     def _update_viewer(self, source_part_id: int, adjacent_parts: Set[int], plane: str, view_direction: str = "top", bbox_offset: float = 5.0):
         """Update 3D viewer to show selected parts from plane direction
@@ -596,3 +641,156 @@ class ResultsPanel(QWidget):
     def get_export_button(self) -> QPushButton:
         """Get export button for signal connection"""
         return self._export_btn
+
+    # ============= DOE Placement Methods =============
+
+    def set_doe_results(self, doe_result: DOEResult):
+        """
+        Set DOE placement results and display them.
+
+        Args:
+            doe_result: DOE result with placements
+        """
+        self._doe_result = doe_result
+
+        # Initialize DOE visualization manager if not already done
+        if self._doe_viz_manager is None and self._viewer:
+            self._doe_viz_manager = DOEVisualizationManager(self._viewer)
+
+        # Clear DOE list
+        self._doe_list.clear()
+
+        # Add placements to list
+        valid_count = 0
+        for placement in doe_result.placements:
+            if placement.is_valid:
+                # Valid placement - show with circle marker
+                item_text = f"○ Option {placement.index + 1}: dx={placement.dx:+.1f}, dy={placement.dy:+.1f}"
+                valid_count += 1
+            else:
+                # Invalid (collision) - show with X marker and gray out
+                item_text = f"✗ Option {placement.index + 1}: dx={placement.dx:+.1f}, dy={placement.dy:+.1f} [COLLISION]"
+
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.UserRole, placement.index)
+
+            if not placement.is_valid:
+                item.setForeground(QColor(150, 150, 150))  # Gray for collisions
+                item.setFlags(item.flags() & ~Qt.ItemIsEnabled)  # Disable selection
+
+            self._doe_list.addItem(item)
+
+        # Update label
+        self._doe_label.setText(f"DOE Placements ({valid_count} valid / {doe_result.num_total} total)")
+
+        # Show DOE widgets
+        self._doe_label.setVisible(True)
+        self._doe_list.setVisible(True)
+        self._marker_legend.setVisible(True)
+
+        # Prepare visualization - extract (dx, dy) pairs for valid placements
+        placements = [(p.dx, p.dy) for p in doe_result.placements if p.is_valid]
+
+        # Set DOE results in visualization manager
+        if self._doe_viz_manager:
+            self._doe_viz_manager.set_doe_results(
+                source_part_id=doe_result.source_part_id,
+                placements=placements,
+                source_center=doe_result.source_center
+            )
+
+    def _on_doe_placement_clicked(self, item: QListWidgetItem):
+        """DOE placement item clicked - show preview"""
+        placement_idx = item.data(Qt.UserRole)
+        if placement_idx is None:
+            return
+
+        # Find the placement
+        if self._doe_result is None:
+            return
+
+        placement = self._doe_result.placements[placement_idx]
+
+        if not placement.is_valid:
+            return  # Don't preview invalid placements
+
+        # Update selection marker in list
+        self._update_doe_list_selection(placement_idx)
+
+        # Show preview in 3D viewer
+        if self._doe_viz_manager:
+            # Map to valid-only index for visualization manager
+            valid_placements = [p for p in self._doe_result.placements if p.is_valid]
+            valid_idx = valid_placements.index(placement) if placement in valid_placements else -1
+
+            if valid_idx >= 0:
+                self._doe_viz_manager.select_placement(valid_idx)
+
+        # Emit signal
+        self.placementSelected.emit(placement_idx)
+
+    def _update_doe_list_selection(self, selected_idx: int):
+        """Update DOE list to show selected item with filled circle"""
+        for i in range(self._doe_list.count()):
+            item = self._doe_list.item(i)
+            item_idx = item.data(Qt.UserRole)
+
+            if item_idx is None:
+                continue
+
+            # Get original text without marker
+            text = item.text()
+            if text.startswith("○ "):
+                text = text[2:]
+            elif text.startswith("● "):
+                text = text[2:]
+            elif text.startswith("✗ "):
+                continue  # Keep collision marker
+
+            # Update marker
+            if item_idx == selected_idx:
+                item.setText(f"● {text}")  # Filled circle for selected
+            else:
+                item.setText(f"○ {text}")  # Empty circle for not selected
+
+    def clear_doe_preview(self):
+        """Clear DOE preview (hide transparent geometry, keep markers)"""
+        if self._doe_viz_manager:
+            self._doe_viz_manager.select_placement(None)
+
+        # Reset selection markers in list
+        for i in range(self._doe_list.count()):
+            item = self._doe_list.item(i)
+            text = item.text()
+
+            if text.startswith("● "):
+                # Replace filled with empty circle
+                item.setText(f"○ {text[2:]}")
+
+    def clear_doe_results(self):
+        """Clear all DOE results and hide DOE widgets"""
+        self._doe_result = None
+        self._doe_list.clear()
+        self._doe_label.setVisible(False)
+        self._doe_list.setVisible(False)
+        self._marker_legend.setVisible(False)
+
+        if self._doe_viz_manager:
+            self._doe_viz_manager.clear()
+
+    def get_doe_result(self) -> Optional[DOEResult]:
+        """Get current DOE result"""
+        return self._doe_result
+
+    def get_selected_doe_placement(self) -> Optional[Placement]:
+        """Get currently selected DOE placement"""
+        items = self._doe_list.selectedItems()
+        if not items or not self._doe_result:
+            return None
+
+        item = items[0]
+        placement_idx = item.data(Qt.UserRole)
+        if placement_idx is None or placement_idx >= len(self._doe_result.placements):
+            return None
+
+        return self._doe_result.placements[placement_idx]

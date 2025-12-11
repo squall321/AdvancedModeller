@@ -16,6 +16,9 @@ class ControlPanel(QWidget):
     # Signals
     detectRequested = Signal()  # User clicked "Detect" button
     settingsChanged = Signal()  # Any setting changed
+    generatePlacementsRequested = Signal()  # User clicked "Generate Placements"
+    clearPreviewRequested = Signal()  # User clicked "Clear Preview"
+    exportCSVRequested = Signal()  # User clicked "Export to CSV"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,6 +53,10 @@ class ControlPanel(QWidget):
         self._detect_btn.setStyleSheet("font-weight: bold;")
         self._detect_btn.clicked.connect(self.detectRequested.emit)
         layout.addWidget(self._detect_btn)
+
+        # DOE Placement Section
+        doe_group = self._create_doe_group()
+        layout.addWidget(doe_group)
 
         # Status Label
         self._status_label = QLabel("Ready")
@@ -207,6 +214,72 @@ class ControlPanel(QWidget):
 
         return group
 
+    def _create_doe_group(self) -> QGroupBox:
+        """DOE placement options group"""
+        group = QGroupBox("DOE Placement")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(4)
+
+        # DOE count
+        count_layout = QHBoxLayout()
+        count_layout.addWidget(QLabel("DOE Count:"))
+
+        self._doe_count_spin = QSpinBox()
+        self._doe_count_spin.setRange(5, 200)
+        self._doe_count_spin.setValue(20)
+        self._doe_count_spin.setSingleStep(5)
+        self._doe_count_spin.setToolTip("Number of placement options to generate")
+        count_layout.addWidget(self._doe_count_spin)
+
+        layout.addLayout(count_layout)
+
+        # Max displacement
+        disp_layout = QHBoxLayout()
+        disp_layout.addWidget(QLabel("Max Disp:"))
+
+        self._max_displacement_spin = QDoubleSpinBox()
+        self._max_displacement_spin.setRange(10.0, 1000.0)
+        self._max_displacement_spin.setValue(100.0)
+        self._max_displacement_spin.setSingleStep(10.0)
+        self._max_displacement_spin.setDecimals(1)
+        self._max_displacement_spin.setSuffix(" mm")
+        self._max_displacement_spin.setToolTip("Maximum XY displacement from original position")
+        disp_layout.addWidget(self._max_displacement_spin)
+
+        layout.addLayout(disp_layout)
+
+        # Generate button
+        self._generate_placements_btn = QPushButton("Generate")
+        self._generate_placements_btn.setEnabled(False)  # Disabled until detection completes
+        self._generate_placements_btn.setToolTip("Generate DOE placement options")
+        self._generate_placements_btn.clicked.connect(self.generatePlacementsRequested.emit)
+        layout.addWidget(self._generate_placements_btn)
+
+        # Action buttons
+        btn_layout = QHBoxLayout()
+
+        self._clear_preview_btn = QPushButton("Clear")
+        self._clear_preview_btn.setEnabled(False)
+        self._clear_preview_btn.setToolTip("Clear preview")
+        self._clear_preview_btn.clicked.connect(self.clearPreviewRequested.emit)
+        btn_layout.addWidget(self._clear_preview_btn)
+
+        self._export_csv_btn = QPushButton("Export")
+        self._export_csv_btn.setEnabled(False)
+        self._export_csv_btn.setToolTip("Export to CSV")
+        self._export_csv_btn.clicked.connect(self.exportCSVRequested.emit)
+        btn_layout.addWidget(self._export_csv_btn)
+
+        layout.addLayout(btn_layout)
+
+        # Description
+        desc = QLabel("Generate DOE placement options using Latin Hypercube Sampling")
+        desc.setStyleSheet("color: gray; font-size: 9pt;")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        return group
+
     # Getters
     def get_plane(self) -> str:
         """Get selected plane"""
@@ -267,3 +340,20 @@ class ControlPanel(QWidget):
     def get_auto_plane_button(self) -> QPushButton:
         """Get auto plane button for signal connection"""
         return self._auto_plane_btn
+
+    def get_doe_count(self) -> int:
+        """Get DOE sample count"""
+        return self._doe_count_spin.value()
+
+    def get_max_displacement(self) -> float:
+        """Get maximum displacement in mm"""
+        return self._max_displacement_spin.value()
+
+    def enable_doe_controls(self, enabled: bool):
+        """Enable/disable DOE controls"""
+        self._generate_placements_btn.setEnabled(enabled)
+
+    def enable_doe_actions(self, enabled: bool):
+        """Enable/disable DOE action buttons (clear, export)"""
+        self._clear_preview_btn.setEnabled(enabled)
+        self._export_csv_btn.setEnabled(enabled)
