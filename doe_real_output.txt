@@ -1,0 +1,11 @@
+============================================================
+DOE Real File Test (DropSet.k)
+============================================================
+
+1. Loading DropSet.k...
+Traceback (most recent call last):
+  File "/home/koopark/claude/LaminateModeller/test_doe_real.py", line 155, in <module>
+    sys.exit(main())
+  File "/home/koopark/claude/LaminateModeller/test_doe_real.py", line 37, in main
+    elements = reader.get_elements()
+AttributeError: 'KFileReader' object has no attribute 'get_elements'. Did you mean: 'get_element'?
