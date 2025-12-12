@@ -148,6 +148,15 @@ class DOEPlacementGenerator:
         # Batch size: start with requested amount, increase if needed
         batch_size = num_samples
 
+        # Debug logging
+        print(f"\n[DOE] 생성 파라미터:")
+        print(f"  요청 샘플: {num_samples}개")
+        print(f"  Max displacement: {max_displacement:.1f} mm")
+        print(f"  Resampling 활성화: {enable_resampling} (최대 {max_attempts}회 시도)")
+        print(f"  소스 중심: ({source_cx:.1f}, {source_cy:.1f})")
+        print(f"  인접 파트: {len(adjacent_bboxes)}개")
+        print(f"  가능 영역: {len(feasible_regions)}개")
+
         # Debug: Check if there are any feasible regions
         if not feasible_regions:
             print(f"⚠ WARNING: No feasible regions found!")
@@ -163,6 +172,9 @@ class DOEPlacementGenerator:
                 max_displacement=max_displacement,
                 feasible_bounds=feasible_bounds
             )
+
+        total_area = sum((r[1]-r[0])*(r[3]-r[2]) for r in feasible_regions)
+        print(f"  총 가능 영역 면적: {total_area:.1f} mm²")
 
         while num_valid < num_samples and attempt < max_attempts:
             # Sample from feasible regions
@@ -229,21 +241,44 @@ class DOEPlacementGenerator:
                     num_valid += 1
                     placement_idx += 1
 
+            # Progress logging every attempt
+            print(f"[DOE] 시도 {attempt + 1}: {num_valid}/{num_samples} valid 달성 ({num_valid/num_samples*100:.1f}%)")
+
             # If we still need more, increase batch size for next attempt
             if num_valid < num_samples:
                 needed = num_samples - num_valid
                 batch_size = needed * 3  # Generate 3x what we need
                 attempt += 1
+                if enable_resampling and attempt < max_attempts:
+                    print(f"[DOE] 재샘플링: {needed}개 부족, 배치 크기 {batch_size}로 증가")
 
-        # Log if we couldn't meet the target
+        # Final logging
+        print(f"\n[DOE] 최종 결과:")
+        print(f"  유효 배치: {num_valid}/{num_samples} ({num_valid/num_samples*100:.1f}%)")
+        print(f"  총 시도: {attempt + 1}회")
+
         if num_valid < num_samples:
-            print(f"⚠ WARNING: Could only generate {num_valid}/{num_samples} valid placements")
-            print(f"  Attempts made: {attempt}")
+            print(f"⚠ WARNING: 목표 달성 실패!")
+            print(f"  부족: {num_samples - num_valid}개")
             print(f"  Max displacement: {max_displacement:.1f} mm")
             print(f"  Feasible regions: {len(feasible_regions)}")
             if feasible_regions:
                 total_area = sum((r[1]-r[0])*(r[3]-r[2]) for r in feasible_regions)
                 print(f"  Total feasible area: {total_area:.1f} mm²")
+        else:
+            print(f"✓ 목표 달성 성공!")
+
+        # Verify all placements respect max_displacement
+        violations = 0
+        for p in placements:
+            dist = np.sqrt(p.dx**2 + p.dy**2)
+            if dist > max_displacement + 0.1:
+                violations += 1
+                if violations <= 3:  # Show first 3
+                    print(f"  ⚠ 제약 위반: Placement {p.index}: dist={dist:.2f} > {max_displacement:.1f}")
+
+        if violations > 0:
+            print(f"  총 {violations}개 배치가 max_displacement 위반!")
 
         return DOEResult(
             source_part_id=source_part_id,

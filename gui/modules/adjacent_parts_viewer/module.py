@@ -487,25 +487,39 @@ class AdjacentPartsViewerModule(BaseModule):
             return
 
         try:
-            # Get parameters
+            # Get parameters from UI
             doe_count = self._control_panel.get_doe_count()
             max_displacement = self._control_panel.get_max_displacement()
 
-            self.log(f"DOE 생성 시작: {doe_count} samples, max={max_displacement:.1f} mm", "info")
+            self.log("=" * 50, "info")
+            self.log(f"DOE 생성 시작", "info")
+            self.log(f"  요청 샘플 개수: {doe_count}", "info")
+            self.log(f"  Max Displacement: {max_displacement:.1f} mm (UI에서 읽음)", "info")
+            self.log(f"  Enable Resampling: True", "info")
+            self.log("=" * 50, "info")
+
             self._control_panel.set_status(f"Generating {doe_count} DOE placements...")
 
             # Generate placements
             result = self._last_detection_result
             adjacent_part_ids = list(result.adjacent_parts)
 
+            self.log(f"소스 파트: {result.source_part_id}", "info")
+            self.log(f"인접 파트 개수: {len(adjacent_part_ids)}", "info")
+
             doe_result = self._doe_generator.generate_placements(
                 source_part_id=result.source_part_id,
                 adjacent_part_ids=adjacent_part_ids,
                 num_samples=doe_count,
-                max_displacement=max_displacement
+                max_displacement=max_displacement,
+                enable_resampling=True  # Keep sampling until target count achieved
             )
 
-            self.log(f"DOE 생성 완료: {doe_result.num_valid}/{doe_result.num_total} valid placements", "success")
+            self.log("=" * 50, "info")
+            self.log(f"DOE 생성 완료", "success")
+            self.log(f"  유효 배치: {doe_result.num_valid}/{doe_count} (목표 달성률: {doe_result.num_valid/doe_count*100:.1f}%)", "success")
+            self.log(f"  총 생성: {doe_result.num_total}", "info")
+            self.log("=" * 50, "info")
             self._control_panel.set_status(
                 f"Generated {doe_result.num_valid}/{doe_result.num_total} valid placements"
             )
