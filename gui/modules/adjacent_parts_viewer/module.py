@@ -516,10 +516,77 @@ class AdjacentPartsViewerModule(BaseModule):
             )
 
             self.log("=" * 50, "info")
-            self.log(f"DOE 생성 완료", "success")
-            self.log(f"  유효 배치: {doe_result.num_valid}/{doe_count} (목표 달성률: {doe_result.num_valid/doe_count*100:.1f}%)", "success")
-            self.log(f"  총 생성: {doe_result.num_total}", "info")
-            self.log("=" * 50, "info")
+
+            # Check result quality
+            success_rate = doe_result.num_valid / doe_count if doe_count > 0 else 0.0
+
+            if doe_result.num_valid == 0:
+                # Critical failure - provide helpful diagnosis
+                self.log(f"DOE 생성 실패: 0개 유효 배치", "error")
+                self.log("=" * 50, "error")
+
+                # Diagnose issue
+                source_bbox = self._doe_generator.get_2d_bbox(result.source_part_id)
+                source_cx, source_cy = source_bbox.center()
+
+                # Find nearest adjacent part
+                min_dist = float('inf')
+                for adj_id in adjacent_part_ids[:10]:  # Check first 10
+                    adj_bbox = self._doe_generator.get_2d_bbox(adj_id)
+                    adj_cx, adj_cy = adj_bbox.center()
+                    dist = ((source_cx - adj_cx)**2 + (source_cy - adj_cy)**2)**0.5
+                    min_dist = min(min_dist, dist)
+
+                self.log(f"진단:", "warning")
+                self.log(f"  가장 가까운 인접 파트 거리: {min_dist:.1f} mm", "warning")
+                self.log(f"  현재 Max Displacement: {max_displacement:.1f} mm", "warning")
+
+                if max_displacement < min_dist:
+                    self.log(f"  ⚠ Max displacement가 너무 작습니다!", "error")
+                    self.log(f"  권장값: {min_dist * 1.2:.1f} mm 이상", "warning")
+
+                    QMessageBox.warning(
+                        self,
+                        "DOE 생성 실패",
+                        f"유효한 배치를 생성할 수 없습니다.\n\n"
+                        f"현재 Max Displacement: {max_displacement:.1f} mm\n"
+                        f"가장 가까운 인접 파트: {min_dist:.1f} mm\n\n"
+                        f"Max Displacement를 {min_dist * 1.2:.1f} mm 이상으로 증가시켜주세요."
+                    )
+                else:
+                    self.log(f"  가능 영역이 매우 좁습니다.", "warning")
+                    QMessageBox.warning(
+                        self,
+                        "DOE 생성 실패",
+                        f"유효한 배치를 생성할 수 없습니다.\n\n"
+                        f"소스 파트가 인접 파트들에 의해 완전히 둘러싸여 있거나,\n"
+                        f"가능한 공간이 매우 제한적입니다.\n\n"
+                        f"Max Displacement를 증가시키거나 다른 파트를 선택해주세요."
+                    )
+
+                self._control_panel.set_status("Failed: 0 valid placements")
+                return  # Don't display empty results
+
+            elif success_rate < 0.7:
+                # Partial success - warn user
+                self.log(f"DOE 생성 부분 성공", "warning")
+                self.log(f"  유효 배치: {doe_result.num_valid}/{doe_count} ({success_rate*100:.1f}%)", "warning")
+                self.log(f"  목표의 70% 미만 달성", "warning")
+                self.log("=" * 50, "warning")
+
+                QMessageBox.warning(
+                    self,
+                    "DOE 생성 부분 성공",
+                    f"요청한 {doe_count}개 중 {doe_result.num_valid}개만 생성되었습니다.\n\n"
+                    f"Max Displacement를 증가시키면 더 많은 배치를 생성할 수 있습니다."
+                )
+            else:
+                # Success
+                self.log(f"DOE 생성 완료", "success")
+                self.log(f"  유효 배치: {doe_result.num_valid}/{doe_count} ({success_rate*100:.1f}%)", "success")
+                self.log(f"  총 생성: {doe_result.num_total}", "info")
+                self.log("=" * 50, "info")
+
             self._control_panel.set_status(
                 f"Generated {doe_result.num_valid}/{doe_result.num_total} valid placements"
             )
@@ -527,8 +594,8 @@ class AdjacentPartsViewerModule(BaseModule):
             # Display results in results panel
             self._results_panel.set_doe_results(doe_result)
 
-            # Enable action buttons
-            self._control_panel.enable_doe_actions(True)
+            # Enable action buttons only if we have results
+            self._control_panel.enable_doe_actions(doe_result.num_valid > 0)
 
         except Exception as e:
             import traceback
