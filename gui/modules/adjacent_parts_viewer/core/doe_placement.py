@@ -79,6 +79,61 @@ class DOEPlacementGenerator:
         # Clamp to reasonable range
         return max(min(suggested, 500.0), 20.0)  # Between 20mm and 500mm
 
+    def filter_coplanar_parts(
+        self,
+        source_part_id: int,
+        adjacent_part_ids: List[int],
+        z_tolerance: float = 1.0
+    ) -> tuple:
+        """
+        Filter out co-planar parts that are face-to-face in Z direction.
+
+        These parts (like PCB under a package) should NOT block XY movement
+        since we only move in XY plane.
+
+        Args:
+            source_part_id: Source part ID
+            adjacent_part_ids: List of adjacent part IDs
+            z_tolerance: Z distance tolerance for co-planar detection (mm)
+
+        Returns:
+            (collision_part_ids, coplanar_part_ids) tuple
+        """
+        source_nodes = self._get_part_nodes(source_part_id)
+        source_z_min = source_nodes[:, 2].min()
+        source_z_max = source_nodes[:, 2].max()
+
+        collision_parts = []
+        coplanar_parts = []
+
+        for adj_id in adjacent_part_ids:
+            adj_nodes = self._get_part_nodes(adj_id)
+            adj_z_min = adj_nodes[:, 2].min()
+            adj_z_max = adj_nodes[:, 2].max()
+
+            # Check if parts are face-to-face (co-planar) in Z
+            # Case 1: Adjacent below source (PCB case)
+            if abs(adj_z_max - source_z_min) < z_tolerance:
+                coplanar_parts.append(adj_id)
+            # Case 2: Adjacent above source (lid case)
+            elif abs(adj_z_min - source_z_max) < z_tolerance:
+                coplanar_parts.append(adj_id)
+            else:
+                # Not co-planar, include in collision check
+                collision_parts.append(adj_id)
+
+        return collision_parts, coplanar_parts
+
+    def _get_part_nodes(self, part_id: int) -> np.ndarray:
+        """Get all node coordinates for a part"""
+        elem_indices = self.mesh_data.part_elements[part_id]
+        coords = []
+        for elem_idx in elem_indices:
+            node_list = self.mesh_data.elements[elem_idx]
+            elem_coords = self.mesh_data.nodes[node_list]
+            coords.append(elem_coords)
+        return np.vstack(coords)
+
     def generate_placements(
         self,
         source_part_id: int,
@@ -100,13 +155,26 @@ class DOEPlacementGenerator:
         Returns:
             DOEResult with placements and metadata
         """
+        # Filter out co-planar parts (e.g., PCB under package)
+        # These should NOT block XY movement
+        collision_part_ids, coplanar_part_ids = self.filter_coplanar_parts(
+            source_part_id, adjacent_part_ids, z_tolerance=1.0
+        )
+
+        print(f"\n[DOE] 파트 필터링:")
+        print(f"  전체 인접 파트: {len(adjacent_part_ids)}개")
+        print(f"  충돌 체크 대상: {len(collision_part_ids)}개")
+        print(f"  면접촉 파트 (제외): {len(coplanar_part_ids)}개")
+        if coplanar_part_ids:
+            print(f"    제외된 파트 IDs: {coplanar_part_ids[:5]}{'...' if len(coplanar_part_ids) > 5 else ''}")
+
         # Get source part geometry
         source_bbox = self.get_2d_bbox(source_part_id)
         source_center_3d = self.get_part_center(source_part_id)
 
-        # Get adjacent part bboxes
+        # Get adjacent part bboxes (only for non-coplanar parts)
         adjacent_bboxes = [
-            self.get_2d_bbox(pid) for pid in adjacent_part_ids
+            self.get_2d_bbox(pid) for pid in collision_part_ids
         ]
 
         # Find feasible regions using voxel-based analysis
@@ -211,9 +279,9 @@ class DOEPlacementGenerator:
                 if displacement > max_displacement:
                     continue
 
-                # Check collision
+                # Check collision (only with non-coplanar parts)
                 collision_parts = self.find_collisions(
-                    source_bbox, dx, dy, adjacent_part_ids, adjacent_bboxes
+                    source_bbox, dx, dy, collision_part_ids, adjacent_bboxes
                 )
                 is_valid = len(collision_parts) == 0
 
