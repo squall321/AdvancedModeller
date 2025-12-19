@@ -4,7 +4,9 @@
 """
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtCore import Qt, Signal, QPoint
+from PySide6.QtGui import QPainter, QFont, QColor, QPen
 from OpenGL.GL import *
+import numpy as np
 import time
 from typing import Optional, Set
 
@@ -59,6 +61,9 @@ class ModelGLWidget(QOpenGLWidget):
         # FPS
         self._frame_count = 0
         self._fps_timer = 0.0
+
+        # Scale bar
+        self._show_scale_bar = True
 
     def _create_backend(self, backend: str):
         """백엔드 생성"""
@@ -206,12 +211,113 @@ class ModelGLWidget(QOpenGLWidget):
         if self._renderer:
             self._renderer.render()
 
+        # Draw scale bar overlay
+        if self._show_scale_bar:
+            self._draw_scale_bar()
+
         # FPS
         self._frame_count += 1
         if time.time() - self._fps_timer > 1.0:
             self.fpsUpdate.emit(self._frame_count)
             self._frame_count = 0
             self._fps_timer = time.time()
+
+    def _draw_scale_bar(self):
+        """Draw scale bar in bottom-left corner"""
+        width = self.width()
+        height = self.height()
+
+        if width <= 0 or height <= 0:
+            return
+
+        # Calculate world size visible on screen
+        # Using camera distance and FOV to estimate world units per pixel
+        fov_rad = np.radians(self._camera.fov)
+        # Vertical field of view determines world height at camera distance
+        world_height = 2.0 * self._camera.distance * np.tan(fov_rad / 2.0)
+        world_per_pixel = world_height / height
+
+        # Target scale bar length in pixels (100-150 pixels)
+        target_bar_pixels = 120
+
+        # Calculate world length for target bar
+        world_length = target_bar_pixels * world_per_pixel
+
+        # Round to nice number (1, 2, 5, 10, 20, 50, 100, ...)
+        nice_length = self._round_to_nice_number(world_length)
+
+        # Actual bar length in pixels
+        bar_pixels = int(nice_length / world_per_pixel)
+        bar_pixels = max(30, min(200, bar_pixels))  # Clamp to reasonable range
+
+        # Format label
+        if nice_length >= 1000:
+            label = f"{nice_length/1000:.0f} m"
+        elif nice_length >= 1:
+            label = f"{nice_length:.0f} mm"
+        else:
+            label = f"{nice_length:.2f} mm"
+
+        # Draw using QPainter overlay
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Position: bottom-left corner with margin
+        margin = 15
+        bar_x = margin
+        bar_y = height - margin - 10
+
+        # Draw background rectangle for visibility
+        bg_width = bar_pixels + 20
+        bg_height = 30
+        painter.fillRect(bar_x - 5, bar_y - 20, bg_width, bg_height,
+                        QColor(0, 0, 0, 120))
+
+        # Draw scale bar line
+        pen = QPen(QColor(255, 255, 255))
+        pen.setWidth(3)
+        painter.setPen(pen)
+        painter.drawLine(bar_x, bar_y, bar_x + bar_pixels, bar_y)
+
+        # Draw end ticks
+        tick_height = 6
+        painter.drawLine(bar_x, bar_y - tick_height, bar_x, bar_y + tick_height)
+        painter.drawLine(bar_x + bar_pixels, bar_y - tick_height,
+                        bar_x + bar_pixels, bar_y + tick_height)
+
+        # Draw label
+        font = QFont("Arial", 9)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(bar_x, bar_y - 8, label)
+
+        painter.end()
+
+    def _round_to_nice_number(self, value: float) -> float:
+        """Round to a nice number (1, 2, 5, 10, 20, 50, ...)"""
+        if value <= 0:
+            return 1.0
+
+        # Find order of magnitude
+        magnitude = 10 ** np.floor(np.log10(value))
+        normalized = value / magnitude
+
+        # Round to 1, 2, or 5
+        if normalized < 1.5:
+            nice = 1.0
+        elif normalized < 3.5:
+            nice = 2.0
+        elif normalized < 7.5:
+            nice = 5.0
+        else:
+            nice = 10.0
+
+        return nice * magnitude
+
+    def set_show_scale_bar(self, show: bool):
+        """Enable/disable scale bar"""
+        self._show_scale_bar = show
+        self.update()
 
     # ===== 마우스 =====
 

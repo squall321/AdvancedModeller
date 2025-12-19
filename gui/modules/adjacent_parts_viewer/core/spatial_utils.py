@@ -65,6 +65,48 @@ class BBox2D:
             max_y=self.max_y + dy
         )
 
+    def min_distance_to(self, other: 'BBox2D') -> float:
+        """
+        Calculate minimum edge-to-edge distance to another bbox.
+
+        Returns negative value if bboxes overlap.
+
+        Args:
+            other: Another BBox2D
+
+        Returns:
+            Minimum distance between edges (negative if overlapping)
+        """
+        # X direction distance
+        if self.max_x < other.min_x:
+            dx = other.min_x - self.max_x
+        elif other.max_x < self.min_x:
+            dx = self.min_x - other.max_x
+        else:
+            dx = 0.0  # Overlapping in X
+
+        # Y direction distance
+        if self.max_y < other.min_y:
+            dy = other.min_y - self.max_y
+        elif other.max_y < self.min_y:
+            dy = self.min_y - other.max_y
+        else:
+            dy = 0.0  # Overlapping in Y
+
+        # If overlapping in either direction, return negative
+        if dx == 0.0 and dy == 0.0:
+            # Complete overlap - return negative of penetration depth
+            x_penetration = min(self.max_x - other.min_x, other.max_x - self.min_x)
+            y_penetration = min(self.max_y - other.min_y, other.max_y - self.min_y)
+            return -min(x_penetration, y_penetration)
+        elif dx == 0.0:
+            return dy
+        elif dy == 0.0:
+            return dx
+        else:
+            # Diagonal distance
+            return np.sqrt(dx**2 + dy**2)
+
     def translate(self, dx: float, dy: float) -> 'BBox2D':
         """
         Translate bbox by displacement.

@@ -69,9 +69,10 @@ class ControlPanel(QWidget):
         """Plane selection group"""
         group = QGroupBox("Projection Plane")
         layout = QVBoxLayout(group)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
+        layout.setContentsMargins(4, 4, 4, 4)
 
-        # Plane selector
+        # Plane selector + Auto button in one row
         plane_layout = QHBoxLayout()
         plane_layout.addWidget(QLabel("Plane:"))
 
@@ -81,47 +82,37 @@ class ControlPanel(QWidget):
         self._plane_combo.currentTextChanged.connect(self.settingsChanged.emit)
         plane_layout.addWidget(self._plane_combo)
 
-        # Auto-suggest button
         self._auto_plane_btn = QPushButton("Auto")
-        self._auto_plane_btn.setMaximumWidth(60)
+        self._auto_plane_btn.setMaximumWidth(50)
         self._auto_plane_btn.setToolTip("Automatically suggest best plane")
         plane_layout.addWidget(self._auto_plane_btn)
 
         layout.addLayout(plane_layout)
 
-        # View direction selector
-        view_layout = QHBoxLayout()
-        view_layout.addWidget(QLabel("View:"))
+        # View + Bbox offset in one row
+        view_offset_layout = QHBoxLayout()
+        view_offset_layout.addWidget(QLabel("View:"))
 
         self._view_direction_combo = QComboBox()
-        self._view_direction_combo.addItems(['Top (+)', 'Bottom (-)'])
-        self._view_direction_combo.setCurrentText('Top (+)')
-        self._view_direction_combo.setToolTip("View from top (hide parts above) or bottom (hide parts below)")
+        self._view_direction_combo.addItems(['Top', 'Bottom'])
+        self._view_direction_combo.setCurrentText('Top')
+        self._view_direction_combo.setToolTip("View direction")
         self._view_direction_combo.currentTextChanged.connect(self.settingsChanged.emit)
-        view_layout.addWidget(self._view_direction_combo)
+        view_offset_layout.addWidget(self._view_direction_combo)
 
-        layout.addLayout(view_layout)
-
-        # Bbox offset multiplier
-        offset_layout = QHBoxLayout()
-        offset_layout.addWidget(QLabel("Bbox Offset:"))
+        view_offset_layout.addWidget(QLabel("Offset:"))
 
         self._bbox_offset_spin = QDoubleSpinBox()
         self._bbox_offset_spin.setRange(0.0, 20.0)
         self._bbox_offset_spin.setValue(5.0)
         self._bbox_offset_spin.setSingleStep(1.0)
         self._bbox_offset_spin.setDecimals(1)
-        self._bbox_offset_spin.setToolTip("In-plane bounding box offset multiplier (show parts within N times source size)")
+        self._bbox_offset_spin.setMinimumWidth(50)
+        self._bbox_offset_spin.setToolTip("Bbox offset multiplier")
         self._bbox_offset_spin.valueChanged.connect(self.settingsChanged.emit)
-        offset_layout.addWidget(self._bbox_offset_spin)
+        view_offset_layout.addWidget(self._bbox_offset_spin)
 
-        layout.addLayout(offset_layout)
-
-        # Description
-        desc = QLabel("Plane to project parts onto for detection")
-        desc.setStyleSheet("color: gray; font-size: 9pt;")
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
+        layout.addLayout(view_offset_layout)
 
         return group
 
@@ -129,41 +120,34 @@ class ControlPanel(QWidget):
         """Thickness range group"""
         group = QGroupBox("Thickness Range")
         layout = QVBoxLayout(group)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
+        layout.setContentsMargins(4, 4, 4, 4)
 
-        # Min thickness
-        min_layout = QHBoxLayout()
-        min_layout.addWidget(QLabel("Min:"))
+        # Min and Max in one row
+        range_layout = QHBoxLayout()
+        range_layout.addWidget(QLabel("Min:"))
 
         self._thickness_min_spin = QDoubleSpinBox()
         self._thickness_min_spin.setRange(0.0, 10000.0)
         self._thickness_min_spin.setValue(0.0)
         self._thickness_min_spin.setSingleStep(1.0)
-        self._thickness_min_spin.setDecimals(2)
+        self._thickness_min_spin.setDecimals(1)
+        self._thickness_min_spin.setMinimumWidth(60)
         self._thickness_min_spin.valueChanged.connect(self.settingsChanged.emit)
-        min_layout.addWidget(self._thickness_min_spin)
+        range_layout.addWidget(self._thickness_min_spin)
 
-        layout.addLayout(min_layout)
-
-        # Max thickness
-        max_layout = QHBoxLayout()
-        max_layout.addWidget(QLabel("Max:"))
+        range_layout.addWidget(QLabel("Max:"))
 
         self._thickness_max_spin = QDoubleSpinBox()
         self._thickness_max_spin.setRange(0.1, 10000.0)
         self._thickness_max_spin.setValue(100.0)
         self._thickness_max_spin.setSingleStep(10.0)
-        self._thickness_max_spin.setDecimals(2)
+        self._thickness_max_spin.setDecimals(1)
+        self._thickness_max_spin.setMinimumWidth(60)
         self._thickness_max_spin.valueChanged.connect(self.settingsChanged.emit)
-        max_layout.addWidget(self._thickness_max_spin)
+        range_layout.addWidget(self._thickness_max_spin)
 
-        layout.addLayout(max_layout)
-
-        # Description
-        desc = QLabel("Search distance range along plane normal")
-        desc.setStyleSheet("color: gray; font-size: 9pt;")
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
+        layout.addLayout(range_layout)
 
         return group
 
@@ -171,46 +155,43 @@ class ControlPanel(QWidget):
         """Detection options group"""
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
+        layout.setContentsMargins(4, 4, 4, 4)
 
-        # Check facing
-        self._check_facing_cb = QCheckBox("Check Facing Direction")
+        # Check facing + Ray density + Coverage in compact layout
+        self._check_facing_cb = QCheckBox("Check Facing")
         self._check_facing_cb.setChecked(True)
-        self._check_facing_cb.setToolTip(
-            "Only include parts that face the source part"
-        )
+        self._check_facing_cb.setToolTip("Only include parts that face the source part")
         self._check_facing_cb.toggled.connect(self.settingsChanged.emit)
         layout.addWidget(self._check_facing_cb)
 
-        # Ray density
-        ray_layout = QHBoxLayout()
-        ray_layout.addWidget(QLabel("Ray Density:"))
+        # Ray density and Coverage in one row
+        params_layout = QHBoxLayout()
+        params_layout.addWidget(QLabel("Ray:"))
 
         self._ray_density_spin = QDoubleSpinBox()
         self._ray_density_spin.setRange(0.01, 1.0)
         self._ray_density_spin.setValue(0.1)
         self._ray_density_spin.setSingleStep(0.05)
         self._ray_density_spin.setDecimals(2)
-        self._ray_density_spin.setToolTip("Rays per unit perimeter length")
+        self._ray_density_spin.setMinimumWidth(55)
+        self._ray_density_spin.setToolTip("Ray density")
         self._ray_density_spin.valueChanged.connect(self.settingsChanged.emit)
-        ray_layout.addWidget(self._ray_density_spin)
+        params_layout.addWidget(self._ray_density_spin)
 
-        layout.addLayout(ray_layout)
-
-        # Coverage threshold
-        cov_layout = QHBoxLayout()
-        cov_layout.addWidget(QLabel("Coverage:"))
+        params_layout.addWidget(QLabel("Cov:"))
 
         self._coverage_spin = QDoubleSpinBox()
         self._coverage_spin.setRange(0.0, 1.0)
         self._coverage_spin.setValue(0.1)
         self._coverage_spin.setSingleStep(0.05)
         self._coverage_spin.setDecimals(2)
-        self._coverage_spin.setToolTip("Minimum coverage to include part (0-1)")
+        self._coverage_spin.setMinimumWidth(55)
+        self._coverage_spin.setToolTip("Coverage threshold")
         self._coverage_spin.valueChanged.connect(self.settingsChanged.emit)
-        cov_layout.addWidget(self._coverage_spin)
+        params_layout.addWidget(self._coverage_spin)
 
-        layout.addLayout(cov_layout)
+        layout.addLayout(params_layout)
 
         return group
 
@@ -218,42 +199,57 @@ class ControlPanel(QWidget):
         """DOE placement options group"""
         group = QGroupBox("DOE Placement")
         layout = QVBoxLayout(group)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
+        layout.setContentsMargins(4, 4, 4, 4)
 
-        # DOE count
-        count_layout = QHBoxLayout()
-        count_layout.addWidget(QLabel("DOE Count:"))
+        # DOE count + Max displacement in one row
+        params_layout = QHBoxLayout()
+        params_layout.addWidget(QLabel("Count:"))
 
         self._doe_count_spin = QSpinBox()
         self._doe_count_spin.setRange(5, 200)
         self._doe_count_spin.setValue(20)
         self._doe_count_spin.setSingleStep(5)
-        self._doe_count_spin.setToolTip("Number of placement options to generate")
-        count_layout.addWidget(self._doe_count_spin)
+        self._doe_count_spin.setMinimumWidth(50)
+        self._doe_count_spin.setToolTip("Number of placements")
+        params_layout.addWidget(self._doe_count_spin)
 
-        layout.addLayout(count_layout)
-
-        # Max displacement
-        disp_layout = QHBoxLayout()
-        disp_layout.addWidget(QLabel("Max Disp:"))
+        params_layout.addWidget(QLabel("Max:"))
 
         self._max_displacement_spin = QDoubleSpinBox()
-        self._max_displacement_spin.setRange(10.0, 1000.0)
+        self._max_displacement_spin.setRange(0.1, 1000.0)
         self._max_displacement_spin.setValue(100.0)
-        self._max_displacement_spin.setSingleStep(10.0)
+        self._max_displacement_spin.setSingleStep(1.0)
         self._max_displacement_spin.setDecimals(1)
-        self._max_displacement_spin.setSuffix(" mm")
-        self._max_displacement_spin.setToolTip("Maximum XY displacement from original position")
-        disp_layout.addWidget(self._max_displacement_spin)
+        self._max_displacement_spin.setSuffix("mm")
+        self._max_displacement_spin.setMinimumWidth(70)
+        self._max_displacement_spin.setToolTip("Max XY displacement")
+        params_layout.addWidget(self._max_displacement_spin)
 
-        layout.addLayout(disp_layout)
+        layout.addLayout(params_layout)
 
-        # Generate button
+        # Grid step
+        grid_layout = QHBoxLayout()
+        grid_layout.addWidget(QLabel("Grid:"))
+
+        self._grid_step_spin = QDoubleSpinBox()
+        self._grid_step_spin.setRange(0.01, 10.0)
+        self._grid_step_spin.setValue(0.1)
+        self._grid_step_spin.setSingleStep(0.05)
+        self._grid_step_spin.setDecimals(2)
+        self._grid_step_spin.setSuffix("mm")
+        self._grid_step_spin.setMinimumWidth(65)
+        self._grid_step_spin.setToolTip("Grid step for auto-suggest")
+        grid_layout.addWidget(self._grid_step_spin)
+
+        # Generate button inline
         self._generate_placements_btn = QPushButton("Generate")
-        self._generate_placements_btn.setEnabled(False)  # Disabled until detection completes
-        self._generate_placements_btn.setToolTip("Generate DOE placement options")
+        self._generate_placements_btn.setEnabled(False)
+        self._generate_placements_btn.setToolTip("Generate DOE placements")
         self._generate_placements_btn.clicked.connect(self.generatePlacementsRequested.emit)
-        layout.addWidget(self._generate_placements_btn)
+        grid_layout.addWidget(self._generate_placements_btn)
+
+        layout.addLayout(grid_layout)
 
         # Action buttons
         btn_layout = QHBoxLayout()
@@ -272,12 +268,6 @@ class ControlPanel(QWidget):
 
         layout.addLayout(btn_layout)
 
-        # Description
-        desc = QLabel("Generate DOE placement options using Latin Hypercube Sampling")
-        desc.setStyleSheet("color: gray; font-size: 9pt;")
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-
         return group
 
     # Getters
@@ -292,7 +282,7 @@ class ControlPanel(QWidget):
     def get_view_direction(self) -> str:
         """Get view direction ('top' or 'bottom')"""
         text = self._view_direction_combo.currentText()
-        return 'top' if 'Top' in text else 'bottom'
+        return 'top' if text == 'Top' else 'bottom'
 
     def get_bbox_offset(self) -> float:
         """Get bbox offset multiplier"""
@@ -348,6 +338,10 @@ class ControlPanel(QWidget):
     def get_max_displacement(self) -> float:
         """Get maximum displacement in mm"""
         return self._max_displacement_spin.value()
+
+    def get_grid_step(self) -> float:
+        """Get grid step size in mm for auto-suggest"""
+        return self._grid_step_spin.value()
 
     def enable_doe_controls(self, enabled: bool):
         """Enable/disable DOE controls"""

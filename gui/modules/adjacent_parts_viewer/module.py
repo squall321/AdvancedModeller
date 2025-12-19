@@ -74,8 +74,10 @@ class AdjacentPartsViewerModule(BaseModule):
         # Main splitter: Part List | Control Panel | Results
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left: Part List
+        # Left: Part List (narrower)
         part_list_widget = QWidget()
+        part_list_widget.setMinimumWidth(120)
+        part_list_widget.setMaximumWidth(200)
         part_list_layout = QVBoxLayout(part_list_widget)
         part_list_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -98,10 +100,13 @@ class AdjacentPartsViewerModule(BaseModule):
         self._results_panel = ResultsPanel()
         splitter.addWidget(self._results_panel)
 
-        # Set splitter ratios: Part List (2) : Controls (1) : Results (3)
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 1)
+        # Set splitter ratios: Part List (1) : Controls (2) : Results (3)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
         splitter.setStretchFactor(2, 3)
+
+        # Set initial sizes (pixels): Part List narrower, Controls and Results wider
+        splitter.setSizes([150, 280, 370])
 
         layout.addWidget(splitter)
 
@@ -393,15 +398,37 @@ class AdjacentPartsViewerModule(BaseModule):
         if self._doe_generator and len(result.adjacent_parts) > 0:
             try:
                 adjacent_part_ids = list(result.adjacent_parts)
-                suggested_displacement = self._doe_generator.suggest_max_displacement(
+
+                # Filter out co-planar parts first (PCB, etc.)
+                collision_parts, coplanar_parts = self._doe_generator.filter_coplanar_parts(
                     source_part_id=result.source_part_id,
-                    adjacent_part_ids=adjacent_part_ids
+                    adjacent_part_ids=adjacent_part_ids,
+                    z_tolerance=1.0
                 )
+
+                self.log(
+                    f"파트 필터링: {len(adjacent_part_ids)}개 인접 → "
+                    f"{len(collision_parts)}개 충돌체크, {len(coplanar_parts)}개 면접촉(제외)",
+                    "info"
+                )
+
+                # Calculate based on actual collision parts only
+                if len(collision_parts) > 0:
+                    grid_step = self._control_panel.get_grid_step()
+                    suggested_displacement = self._doe_generator.suggest_max_displacement(
+                        source_part_id=result.source_part_id,
+                        adjacent_part_ids=collision_parts,  # Use filtered list!
+                        grid_step=grid_step
+                    )
+                else:
+                    # No collision parts - very free space
+                    suggested_displacement = 50.0
+
                 # Update control panel
                 self._control_panel._max_displacement_spin.setValue(suggested_displacement)
                 self.log(
                     f"자동 Max Displacement 설정: {suggested_displacement:.1f} mm "
-                    f"(인접 패키지 거리 기반)",
+                    f"(실제 간격의 ~40%)",
                     "info"
                 )
             except Exception as e:
@@ -507,12 +534,22 @@ class AdjacentPartsViewerModule(BaseModule):
             self.log(f"소스 파트: {result.source_part_id}", "info")
             self.log(f"인접 파트 개수: {len(adjacent_part_ids)}", "info")
 
+            # Pre-filter to show user what will be checked
+            collision_parts, excluded_parts = self._doe_generator.filter_coplanar_parts(
+                source_part_id=result.source_part_id,
+                adjacent_part_ids=adjacent_part_ids,
+                z_tolerance=1.0
+            )
+            self.log(f"충돌 체크 대상: {len(collision_parts)}개", "info")
+            self.log(f"제외 파트 (면접촉/enclosing): {len(excluded_parts)}개", "info")
+
             doe_result = self._doe_generator.generate_placements(
                 source_part_id=result.source_part_id,
                 adjacent_part_ids=adjacent_part_ids,
                 num_samples=doe_count,
                 max_displacement=max_displacement,
-                enable_resampling=True  # Keep sampling until target count achieved
+                enable_resampling=True,  # Keep sampling until target count achieved
+                use_voxel=True  # Use accurate voxel-based collision detection
             )
 
             self.log("=" * 50, "info")
@@ -529,29 +566,59 @@ class AdjacentPartsViewerModule(BaseModule):
                 source_bbox = self._doe_generator.get_2d_bbox(result.source_part_id)
                 source_cx, source_cy = source_bbox.center()
 
-                # Find nearest adjacent part
-                min_dist = float('inf')
-                for adj_id in adjacent_part_ids[:10]:  # Check first 10
+                # Find nearest collision part by EDGE distance (not center)
+                min_edge_dist = float('inf')
+                nearest_part = None
+                for adj_id in collision_parts[:10]:  # Check first 10 collision parts
                     adj_bbox = self._doe_generator.get_2d_bbox(adj_id)
-                    adj_cx, adj_cy = adj_bbox.center()
-                    dist = ((source_cx - adj_cx)**2 + (source_cy - adj_cy)**2)**0.5
-                    min_dist = min(min_dist, dist)
+                    # Calculate edge-to-edge distance in X and Y
+                    dx = max(0, adj_bbox.min_x - source_bbox.max_x, source_bbox.min_x - adj_bbox.max_x)
+                    dy = max(0, adj_bbox.min_y - source_bbox.max_y, source_bbox.min_y - adj_bbox.max_y)
+                    edge_dist = (dx**2 + dy**2)**0.5
+                    if edge_dist < min_edge_dist:
+                        min_edge_dist = edge_dist
+                        nearest_part = adj_id
 
                 self.log(f"진단:", "warning")
-                self.log(f"  가장 가까운 인접 파트 거리: {min_dist:.1f} mm", "warning")
+                self.log(f"  충돌 체크 대상 파트: {len(collision_parts)}개", "warning")
+                if nearest_part is not None:
+                    self.log(f"  가장 가까운 충돌 파트: Part {nearest_part} (가장자리 거리: {min_edge_dist:.2f} mm)", "warning")
+                else:
+                    self.log(f"  충돌 체크 대상 파트가 없음", "warning")
                 self.log(f"  현재 Max Displacement: {max_displacement:.1f} mm", "warning")
 
-                if max_displacement < min_dist:
-                    self.log(f"  ⚠ Max displacement가 너무 작습니다!", "error")
-                    self.log(f"  권장값: {min_dist * 1.2:.1f} mm 이상", "warning")
-
+                # Different diagnosis based on whether we have collision parts
+                if len(collision_parts) == 0:
+                    # No collision parts - should have 100% valid, something else is wrong
+                    self.log(f"  충돌 체크 대상 파트 없음 - 가능 영역 계산 문제", "error")
+                    QMessageBox.warning(
+                        self,
+                        "DOE 생성 실패",
+                        f"충돌 체크 대상 파트가 없으나 유효 배치가 생성되지 않았습니다.\n\n"
+                        f"Feasible space 계산 중 문제가 발생했을 수 있습니다.\n"
+                        f"Max Displacement를 증가시켜 보세요."
+                    )
+                elif min_edge_dist > 0 and min_edge_dist > max_displacement:
+                    # Parts are far apart - displacement too small to reach anything
+                    self.log(f"  충돌 파트와 거리가 있어 움직일 공간 있음", "info")
+                    self.log(f"  Feasible space 계산 문제일 가능성", "warning")
+                    QMessageBox.warning(
+                        self,
+                        "DOE 생성 실패",
+                        f"가능 영역 계산에 문제가 있습니다.\n\n"
+                        f"가장 가까운 충돌 파트 거리: {min_edge_dist:.2f} mm\n"
+                        f"현재 Max Displacement: {max_displacement:.1f} mm\n\n"
+                        f"Max Displacement를 늘리거나 다시 시도해주세요."
+                    )
+                elif min_edge_dist == 0:
+                    # Parts are touching/overlapping
+                    self.log(f"  ⚠ 충돌 파트와 이미 접촉 중!", "error")
                     QMessageBox.warning(
                         self,
                         "DOE 생성 실패",
                         f"유효한 배치를 생성할 수 없습니다.\n\n"
-                        f"현재 Max Displacement: {max_displacement:.1f} mm\n"
-                        f"가장 가까운 인접 파트: {min_dist:.1f} mm\n\n"
-                        f"Max Displacement를 {min_dist * 1.2:.1f} mm 이상으로 증가시켜주세요."
+                        f"소스 파트가 충돌 파트와 이미 접촉/겹침 상태입니다.\n"
+                        f"다른 파트를 선택하거나 모델을 확인해주세요."
                     )
                 else:
                     self.log(f"  가능 영역이 매우 좁습니다.", "warning")

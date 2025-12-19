@@ -59,9 +59,12 @@ class ResultsPanel(QWidget):
         viewer_group = self._create_viewer_group()
         splitter.addWidget(viewer_group)
 
-        # Set splitter ratios: Parts (1) : Viewer (12) - 3D viewer gets much more space
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 12)
+        # Set splitter ratios: Parts (2) : Viewer (5) - Better balance for DOE list visibility
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 5)
+
+        # Set initial sizes to ensure DOE list is visible
+        splitter.setSizes([250, 350])
 
         layout.addWidget(splitter)
 
@@ -72,6 +75,7 @@ class ResultsPanel(QWidget):
     def _create_parts_group(self) -> QGroupBox:
         """Adjacent parts list group"""
         group = QGroupBox("Adjacent Parts")
+        group.setMinimumHeight(200)  # Ensure enough height for parts list + DOE list
         layout = QVBoxLayout(group)
         layout.setSpacing(4)
 
@@ -89,20 +93,20 @@ class ResultsPanel(QWidget):
 
         # DOE Placements list (initially hidden)
         self._doe_label = QLabel("DOE Placements (0)")
-        self._doe_label.setStyleSheet("font-weight: bold; margin-top: 8px;")
+        self._doe_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
         self._doe_label.setVisible(False)
         layout.addWidget(self._doe_label)
 
         self._doe_list = QListWidget()
         self._doe_list.setSelectionMode(QListWidget.SingleSelection)
         self._doe_list.itemClicked.connect(self._on_doe_placement_clicked)
+        self._doe_list.setMinimumHeight(120)  # Ensure DOE list is visible
+        self._doe_list.setStyleSheet("QListWidget::item { padding: 4px 2px; min-height: 22px; font-size: 10pt; }")
         self._doe_list.setVisible(False)
         layout.addWidget(self._doe_list)
 
-        # Legend for markers
-        self._marker_legend = QLabel("● Black: Original  ● Dark Red: DOE options  ● Transparent Red: Preview")
-        self._marker_legend.setStyleSheet("color: gray; font-size: 8pt; margin-top: 4px;")
-        self._marker_legend.setWordWrap(True)
+        # Legend for markers (hidden to save space)
+        self._marker_legend = QLabel("")
         self._marker_legend.setVisible(False)
         layout.addWidget(self._marker_legend)
 
@@ -664,12 +668,12 @@ class ResultsPanel(QWidget):
         valid_count = 0
         for placement in doe_result.placements:
             if placement.is_valid:
-                # Valid placement - show with circle marker
-                item_text = f"○ Option {placement.index + 1}: dx={placement.dx:+.1f}, dy={placement.dy:+.1f}"
+                # Valid placement - compact format: #N: X value, Y value
+                item_text = f"○ #{placement.index + 1:2d}:  X {placement.dx:+6.2f}  Y {placement.dy:+6.2f}"
                 valid_count += 1
             else:
-                # Invalid (collision) - show with X marker and gray out
-                item_text = f"✗ Option {placement.index + 1}: dx={placement.dx:+.1f}, dy={placement.dy:+.1f} [COLLISION]"
+                # Invalid (collision) - show with X marker
+                item_text = f"✗ #{placement.index + 1:2d}:  X {placement.dx:+6.2f}  Y {placement.dy:+6.2f}"
 
             item = QListWidgetItem(item_text)
             item.setData(Qt.UserRole, placement.index)

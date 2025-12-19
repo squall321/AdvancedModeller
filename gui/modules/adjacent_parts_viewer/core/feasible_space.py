@@ -108,13 +108,8 @@ class FeasibleSpaceAnalyzer:
                 # Check if displaced source would overlap any adjacent part
                 displaced_bbox = source_bbox.translate(dx, dy)
 
-                # Expand slightly for safety
-                displaced_bbox = BBox2D(
-                    min_x=displaced_bbox.min_x - margin,
-                    max_x=displaced_bbox.max_x + margin,
-                    min_y=displaced_bbox.min_y - margin,
-                    max_y=displaced_bbox.max_y + margin
-                )
+                # Note: adjacent parts already expanded by margin above (lines 76-81)
+                # No need to expand displaced_bbox again - that would double the margin
 
                 # Check collision
                 collides = False
