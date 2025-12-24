@@ -29,7 +29,7 @@ class ControlPanel(QWidget):
         """Setup UI layout"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(8)
+        layout.setSpacing(4)  # Reduced from 8 to 4
 
         # Title
         title = QLabel("Adjacent Parts Detection")
@@ -70,7 +70,7 @@ class ControlPanel(QWidget):
         group = QGroupBox("Projection Plane")
         layout = QVBoxLayout(group)
         layout.setSpacing(2)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
 
         # Plane selector + Auto button in one row
         plane_layout = QHBoxLayout()
@@ -121,7 +121,7 @@ class ControlPanel(QWidget):
         group = QGroupBox("Thickness Range")
         layout = QVBoxLayout(group)
         layout.setSpacing(2)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
 
         # Min and Max in one row
         range_layout = QHBoxLayout()
@@ -156,7 +156,7 @@ class ControlPanel(QWidget):
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
         layout.setSpacing(2)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
 
         # Check facing + Ray density + Coverage in compact layout
         self._check_facing_cb = QCheckBox("Check Facing")
@@ -200,7 +200,7 @@ class ControlPanel(QWidget):
         group = QGroupBox("DOE Placement")
         layout = QVBoxLayout(group)
         layout.setSpacing(2)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
 
         # DOE count + Max displacement in one row
         params_layout = QHBoxLayout()

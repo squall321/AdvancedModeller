@@ -57,10 +57,10 @@ class AdjacentPartsViewerModule(BaseModule):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
-        # Title
+        # Title (reduced font size for compactness)
         header = QHBoxLayout()
         title = QLabel("패키지 이동 DOE")
-        title.setStyleSheet("font-weight: bold; font-size: 14pt;")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")  # Reduced from 14pt to 12pt
         header.addWidget(title)
         header.addStretch()
 
@@ -83,6 +83,8 @@ class AdjacentPartsViewerModule(BaseModule):
 
         part_list_group = QGroupBox("Part 목록")
         part_list_group_layout = QVBoxLayout(part_list_group)
+        part_list_group_layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
+        part_list_group_layout.setSpacing(2)  # Compact spacing
 
         # Part list
         self._part_list = QListWidget()

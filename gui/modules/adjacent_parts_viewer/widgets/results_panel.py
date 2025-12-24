@@ -41,7 +41,7 @@ class ResultsPanel(QWidget):
         """Setup UI layout"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(8)
+        layout.setSpacing(4)  # Reduced from 8 to 4
 
         # Title
         title = QLabel("Detection Results")
@@ -77,7 +77,8 @@ class ResultsPanel(QWidget):
         group = QGroupBox("Adjacent Parts")
         group.setMinimumHeight(200)  # Ensure enough height for parts list + DOE list
         layout = QVBoxLayout(group)
-        layout.setSpacing(4)
+        layout.setSpacing(2)  # Reduced from 4 to 2
+        layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
 
         # Count label
         self._count_label = QLabel("Found: 0 parts")
