@@ -69,6 +69,9 @@ build_nuitka() {
         --include-data-dir=config=config \
         --include-package=gui.modules.advanced_laminate \
         --include-package=gui.modules.advanced_contact \
+        --include-package=gui.modules.adjacent_parts_viewer \
+        --include-package=gui.modules.file_loader \
+        --include-package=gui.modules.model_viewer \
         gui/main.py
 
     # 파일명 변경
