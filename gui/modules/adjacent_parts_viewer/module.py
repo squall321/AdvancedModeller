@@ -13,9 +13,11 @@ from gui.modules import ModuleRegistry
 from gui.modules.base import BaseModule
 from .core import AdjacentPartsDetector, DetectionResult
 from .core.doe_placement import DOEPlacementGenerator
+from .core.script_generator import DOEScriptGenerator
 from .export.doe_exporter import DOEExporter
 from .widgets.control_panel import ControlPanel
 from .widgets.results_panel import ResultsPanel
+from .widgets.script_preview_dialog import ScriptPreviewDialog
 
 
 @ModuleRegistry.register(
@@ -48,6 +50,8 @@ class AdjacentPartsViewerModule(BaseModule):
         self._current_source_part = None
         self._doe_generator = None
         self._last_detection_result = None
+        self._script_generator = None
+        self._generated_script = None
 
         self._setup_connections()
 
@@ -192,6 +196,10 @@ class AdjacentPartsViewerModule(BaseModule):
             self.log("DOE Generator 초기화 중...", "info")
             self._doe_generator = DOEPlacementGenerator(self._mesh_data)
             self.log("DOE Generator 초기화 완료", "success")
+
+            # Initialize script generator
+            self._script_generator = DOEScriptGenerator()
+            self.log("Script Generator 초기화 완료", "success")
 
             # Populate Part list
             self.log("Part 목록 채우는 중...", "info")
@@ -778,32 +786,75 @@ class AdjacentPartsViewerModule(BaseModule):
             )
             return
 
-        # TODO: Implement script generation
-        # For now, just show placeholder
-        QMessageBox.information(
-            self,
-            "스크립트 생성",
-            f"스크립트 생성 기능 구현 예정\n\n"
-            f"Source Part: {doe_result.source_part_id}\n"
-            f"Valid Placements: {doe_result.num_valid}\n"
-            f"Max Displacement: {doe_result.max_displacement:.1f}mm"
-        )
+        try:
+            # Generate script
+            self._generated_script = self._script_generator.generate_script(
+                doe_result=doe_result,
+                output_name=f"doe_part_{doe_result.source_part_id}"
+            )
 
-        # Enable preview and run buttons after script generation
-        self._preview_btn.setEnabled(True)
-        self._koomesh_btn.setEnabled(True)
-        self.log("스크립트 생성 완료 (미리보기/실행 버튼 활성화)", "success")
+            self.log("스크립트 생성 완료", "success")
+            self.log(f"  Source Part: {doe_result.source_part_id}", "info")
+            self.log(f"  Valid Placements: {doe_result.num_valid}", "info")
+            self.log(f"  Script lines: {len(self._generated_script.split(chr(10)))}", "info")
+
+            # Show success message
+            QMessageBox.information(
+                self,
+                "스크립트 생성 완료",
+                f"DOE 변환 스크립트가 생성되었습니다.\n\n"
+                f"Source Part: {doe_result.source_part_id}\n"
+                f"Valid Placements: {doe_result.num_valid}\n"
+                f"Script Lines: {len(self._generated_script.split(chr(10)))}\n\n"
+                f"'미리보기' 버튼을 클릭하여 스크립트를 확인하세요."
+            )
+
+            # Enable preview and run buttons after script generation
+            self._preview_btn.setEnabled(True)
+            self._koomesh_btn.setEnabled(True)
+            self.log("미리보기/실행 버튼 활성화", "success")
+
+        except Exception as e:
+            import traceback
+            self.log(f"스크립트 생성 실패: {str(e)}", "error")
+            self.log(f"상세:\n{traceback.format_exc()}", "error")
+            QMessageBox.critical(
+                self,
+                "스크립트 생성 실패",
+                f"스크립트 생성 중 오류가 발생했습니다:\n{str(e)}"
+            )
 
     def _on_preview_script(self):
         """Handle Preview button click"""
         self.log("스크립트 미리보기", "info")
 
-        # TODO: Implement script preview dialog
-        QMessageBox.information(
-            self,
-            "스크립트 미리보기",
-            "스크립트 미리보기 기능 구현 예정"
-        )
+        if not self._generated_script:
+            QMessageBox.warning(
+                self,
+                "미리보기 오류",
+                "생성된 스크립트가 없습니다.\n먼저 '스크립트 생성' 버튼을 클릭하세요."
+            )
+            return
+
+        try:
+            # Show preview dialog
+            dialog = ScriptPreviewDialog(self._generated_script, self)
+            dialog.exec()
+
+            # Log if script was saved
+            saved_path = dialog.get_saved_path()
+            if saved_path:
+                self.log(f"스크립트 저장 완료: {saved_path}", "success")
+
+        except Exception as e:
+            import traceback
+            self.log(f"미리보기 실패: {str(e)}", "error")
+            self.log(f"상세:\n{traceback.format_exc()}", "error")
+            QMessageBox.critical(
+                self,
+                "미리보기 실패",
+                f"미리보기 중 오류가 발생했습니다:\n{str(e)}"
+            )
 
     def _on_run_koomesh(self):
         """Handle KooMeshModifier Run button click"""
