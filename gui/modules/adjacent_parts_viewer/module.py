@@ -54,24 +54,10 @@ class AdjacentPartsViewerModule(BaseModule):
     def _setup_ui(self):
         """Setup UI layout"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(12, 8, 12, 8)  # Match advanced_laminate margins
+        layout.setSpacing(8)
 
-        # Title (reduced font size for compactness)
-        header = QHBoxLayout()
-        title = QLabel("패키지 이동 DOE")
-        title.setStyleSheet("font-weight: bold; font-size: 12pt;")  # Reduced from 14pt to 12pt
-        header.addWidget(title)
-        header.addStretch()
-
-        # Source part selection label
-        self._source_label = QLabel("Source Part: None")
-        self._source_label.setStyleSheet("font-weight: bold; color: #2563eb;")
-        header.addWidget(self._source_label)
-
-        layout.addLayout(header)
-
-        # Main splitter: Part List | Control Panel | Results
+        # Main splitter: Part List | Control Panel | Results (no header)
         splitter = QSplitter(Qt.Horizontal)
 
         # Left: Part List (narrower)
@@ -85,6 +71,11 @@ class AdjacentPartsViewerModule(BaseModule):
         part_list_group_layout = QVBoxLayout(part_list_group)
         part_list_group_layout.setContentsMargins(4, 2, 4, 4)  # Reduced top margin
         part_list_group_layout.setSpacing(2)  # Compact spacing
+
+        # Source part label
+        self._source_label = QLabel("Source: None")
+        self._source_label.setStyleSheet("font-weight: bold; color: #2563eb; padding: 4px;")
+        part_list_group_layout.addWidget(self._source_label)
 
         # Part list
         self._part_list = QListWidget()
@@ -110,7 +101,32 @@ class AdjacentPartsViewerModule(BaseModule):
         # Set initial sizes (pixels): Part List narrower, Controls and Results wider
         splitter.setSizes([150, 280, 370])
 
-        layout.addWidget(splitter)
+        layout.addWidget(splitter, 1)  # Stretch factor 1 for main content
+
+        # === Actions Section ===
+        actions_group = QGroupBox("Actions")
+        actions_layout = QHBoxLayout(actions_group)
+
+        # Import qtawesome for icons
+        import qtawesome as qta
+
+        self._script_gen_btn = QPushButton(qta.icon('fa5s.file-code', color='#f3f4f6'), " 스크립트 생성")
+        self._script_gen_btn.setFixedHeight(40)
+        self._script_gen_btn.setEnabled(False)  # Enabled after successful DOE generation
+        actions_layout.addWidget(self._script_gen_btn)
+
+        self._preview_btn = QPushButton(qta.icon('fa5s.eye', color='#f3f4f6'), " 미리보기")
+        self._preview_btn.setFixedHeight(40)
+        self._preview_btn.setEnabled(False)  # Enabled after script generation
+        actions_layout.addWidget(self._preview_btn)
+
+        self._koomesh_btn = QPushButton(qta.icon('fa5s.play', color='#f3f4f6'), " KooMeshModifier 실행")
+        self._koomesh_btn.setObjectName("success")
+        self._koomesh_btn.setFixedHeight(40)
+        self._koomesh_btn.setEnabled(False)  # Enabled after script generation
+        actions_layout.addWidget(self._koomesh_btn)
+
+        layout.addWidget(actions_group)
 
     def _setup_connections(self):
         """Setup signal connections"""
@@ -132,6 +148,11 @@ class AdjacentPartsViewerModule(BaseModule):
         self._results_panel.partSelected.connect(self._on_part_selected)
         self._results_panel.partDoubleClicked.connect(self._on_part_zoom)
         self._results_panel.placementSelected.connect(self._on_placement_selected)
+
+        # Actions buttons
+        self._script_gen_btn.clicked.connect(self._on_generate_script)
+        self._preview_btn.clicked.connect(self._on_preview_script)
+        self._koomesh_btn.clicked.connect(self._on_run_koomesh)
 
     def on_activate(self):
         """모듈 활성화 시 호출"""
@@ -236,7 +257,7 @@ class AdjacentPartsViewerModule(BaseModule):
             return
 
         self._current_source_part = part_id
-        self._source_label.setText(f"Source Part: {part_id}")
+        self._source_label.setText(f"Source: Part {part_id}")
         self.log(f"Source Part 설정: {part_id}", "info")
 
         # Auto-suggest best plane
@@ -666,6 +687,11 @@ class AdjacentPartsViewerModule(BaseModule):
             # Enable action buttons only if we have results
             self._control_panel.enable_doe_actions(doe_result.num_valid > 0)
 
+            # Enable script generation button in Actions section
+            if doe_result.num_valid > 0:
+                self._script_gen_btn.setEnabled(True)
+                self.log("스크립트 생성 버튼 활성화", "info")
+
         except Exception as e:
             import traceback
             self.log(f"DOE 생성 실패: {str(e)}", "error")
@@ -735,6 +761,60 @@ class AdjacentPartsViewerModule(BaseModule):
     def _on_placement_selected(self, placement_idx: int):
         """Handle DOE placement selection"""
         self.log(f"Placement {placement_idx + 1} selected", "info")
+
+    # ============= Actions Handlers =============
+
+    def _on_generate_script(self):
+        """Handle Generate Script button click"""
+        self.log("스크립트 생성 시작", "info")
+
+        # Get DOE result
+        doe_result = self._results_panel.get_doe_result()
+        if not doe_result or doe_result.num_valid == 0:
+            QMessageBox.warning(
+                self,
+                "스크립트 생성 오류",
+                "유효한 DOE 결과가 없습니다.\n먼저 DOE를 생성해주세요."
+            )
+            return
+
+        # TODO: Implement script generation
+        # For now, just show placeholder
+        QMessageBox.information(
+            self,
+            "스크립트 생성",
+            f"스크립트 생성 기능 구현 예정\n\n"
+            f"Source Part: {doe_result.source_part_id}\n"
+            f"Valid Placements: {doe_result.num_valid}\n"
+            f"Max Displacement: {doe_result.max_displacement:.1f}mm"
+        )
+
+        # Enable preview and run buttons after script generation
+        self._preview_btn.setEnabled(True)
+        self._koomesh_btn.setEnabled(True)
+        self.log("스크립트 생성 완료 (미리보기/실행 버튼 활성화)", "success")
+
+    def _on_preview_script(self):
+        """Handle Preview button click"""
+        self.log("스크립트 미리보기", "info")
+
+        # TODO: Implement script preview dialog
+        QMessageBox.information(
+            self,
+            "스크립트 미리보기",
+            "스크립트 미리보기 기능 구현 예정"
+        )
+
+    def _on_run_koomesh(self):
+        """Handle KooMeshModifier Run button click"""
+        self.log("KooMeshModifier 실행 시작", "info")
+
+        # TODO: Implement KooMeshModifier execution
+        QMessageBox.information(
+            self,
+            "KooMeshModifier 실행",
+            "KooMeshModifier 실행 기능 구현 예정"
+        )
 
     @staticmethod
     def get_module_info():
