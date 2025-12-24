@@ -355,15 +355,25 @@ class AppContext:
         try:
             filepath = Path(path)
             if not filepath.exists():
+                print(f"[AppContext] 파일이 존재하지 않음: {path}")
                 return False
+
+            print(f"[AppContext] K-file 로드 시작: {filepath.name}")
+            print(f"[AppContext] 경로: {path}")
+            print(f"[AppContext] C++ 파서 사용 가능: {_KFILE_READER_AVAILABLE}")
 
             if use_fast_parser and _KFILE_READER_AVAILABLE:
                 # C++ 고속 파서 사용
                 import time
                 start = time.perf_counter()
 
+                # Windows 경로 처리: Path 객체를 문자열로 변환하고 절대 경로 사용
+                abs_path = str(filepath.resolve())
+                print(f"[AppContext] 절대 경로: {abs_path}")
+                print(f"[AppContext] KFileReader 초기화 중...")
+
                 reader = KFileReader(
-                    str(path),
+                    abs_path,
                     parse_nodes=True,
                     parse_parts=True,
                     parse_elements=True,
@@ -383,9 +393,18 @@ class AppContext:
 
                 elapsed = (time.perf_counter() - start) * 1000
 
+                print(f"[AppContext] 파싱 완료 ({elapsed:.1f}ms)")
+
+                # 통계 확인
+                stats = reader.stats
+                print(f"[AppContext] 통계:")
+                print(f"  - Nodes: {stats.get('nodes', 0):,}")
+                print(f"  - Elements: {stats.get('elements', {})}")
+                print(f"  - Parts: {stats.get('parts', 0):,}")
+
                 # 모델 데이터 저장
                 self.model = ParsedModelData(
-                    filepath=str(path),
+                    filepath=abs_path,
                     filename=filepath.name,
                     parse_time_ms=elapsed,
                 )
@@ -393,10 +412,11 @@ class AppContext:
                 self.model._reader = reader
 
                 # 통계 업데이트
-                stats = reader.stats
                 self.model.node_count = stats.get('nodes', 0)
                 self.model.element_count = stats.get('elements', {}).get('total', 0)
                 self.model.part_count = stats.get('parts', 0)
+
+                print(f"[AppContext] 모델 저장 완료")
 
             else:
                 # 기본 Python 파서 사용 (Part ID만)

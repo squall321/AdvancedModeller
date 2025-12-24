@@ -1,7 +1,24 @@
 #!/usr/bin/env python3
 """KooMesh Modeller GUI - Entry Point"""
 import sys
+import os
 from pathlib import Path
+
+# Windows 콘솔 UTF-8 인코딩 설정 (한글 깨짐 방지)
+if sys.platform == 'win32':
+    try:
+        # Python 3.7+ Windows UTF-8 모드
+        if hasattr(sys, 'set_utf8_mode'):
+            sys.set_utf8_mode(True)
+        # 콘솔 인코딩 강제 설정
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+        # 환경변수 설정
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+    except:
+        pass
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

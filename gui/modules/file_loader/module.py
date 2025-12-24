@@ -198,9 +198,12 @@ class FileLoaderModule(BaseModule):
         """K-file 로드"""
         try:
             self._status.setText(f"로드 중: {os.path.basename(filepath)}...")
+            self.log(f"Loading K-file: {filepath}", "info")
 
             # AppContext에 로드
-            self.ctx.load_k_file(filepath)
+            success = self.ctx.load_k_file(filepath)
+            if not success:
+                raise Exception("K-file 로드 실패 - 파일을 읽을 수 없습니다")
 
             # 파일 경로 표시
             self._file_label.setText(filepath)
