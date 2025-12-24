@@ -65,10 +65,10 @@ class DOEScriptGenerator:
         y_str = self._format_displacement_list(y_displacements)
         z_str = self._format_displacement_list(z_displacements)
 
-        # Add translation commands
-        lines.append(f"*TranslationX,PID,{x_str}")
-        lines.append(f"*TranslationY,PID,{y_str}")
-        lines.append(f"*TranslationZ,PID,{z_str}")
+        # Add translation commands with actual part ID
+        lines.append(f"*TranslationX,{pid},{x_str}")
+        lines.append(f"*TranslationY,{pid},{y_str}")
+        lines.append(f"*TranslationZ,{pid},{z_str}")
 
         lines.append("**EndTranslation_DOE")
         lines.append("*End")

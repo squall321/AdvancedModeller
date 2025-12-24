@@ -197,8 +197,9 @@ class AdjacentPartsViewerModule(BaseModule):
             self._doe_generator = DOEPlacementGenerator(self._mesh_data)
             self.log("DOE Generator 초기화 완료", "success")
 
-            # Initialize script generator
-            self._script_generator = DOEScriptGenerator()
+            # Initialize script generator with K-file path
+            k_file_path = self.ctx.model.filepath if self.ctx.model.is_loaded else None
+            self._script_generator = DOEScriptGenerator(k_file_path=k_file_path)
             self.log("Script Generator 초기화 완료", "success")
 
             # Populate Part list
