@@ -15,7 +15,7 @@ class get_pybind_include:
 def get_extra_compile_args():
     """Get platform-specific compile args"""
     if sys.platform == 'win32':
-        return ['/std:c++17', '/O2']
+        return ['/std:c++17', '/O2', '/utf-8']
     else:
         return ['-std=c++17', '-O3', '-fPIC', '-Wall']
 
